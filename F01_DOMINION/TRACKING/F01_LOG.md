@@ -1,27 +1,17 @@
-# F01_DOMINION — TRACKING LOG
+# F01_DOMINION — Journal de Mission
 
-**Nom de code :** DOMINION
-**Analogie :** Le Prophète
-**Rôle :** Clonage & Synthèse vocale via OmniVoice (fork)
+> Frégate DOMINION — Le Prophète
+> Pipeline : reference_vocale.wav → voix_brute.wav
 
----
-
-## Format d'entrée
-
-```
-## [TIMESTAMP] Session #N
-- Script text: '...'
-- Voice reference: fichier.wav
-- Output: voix_brute.wav (durée, samplerate, canaux)
-- OmniVoice endpoint: /api/tts
-- SR_CUSTOS validation: PASS / FAIL
-- Notes: ...
-```
+| Champ | Valeur |
+|-------|--------|
+| Frégate | F01_DOMINION |
+| Rôle | Clonage & Synthèse Vocale |
+| Moteur | OmniVoice-Studio (f5-tts) |
+| Interface | Gradio headless |
 
 ---
 
-## Sessions
+## Historique des missions
 
-*(Aucune session enregistrée — en attente de première exécution)*
-
----
+*(Généré automatiquement par dominion_prophet.ipynb)*
