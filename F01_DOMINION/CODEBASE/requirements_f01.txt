@@ -1,0 +1,8 @@
+# F01 DOMINION — Dépendances
+# OmniVoice-Studio fork est cloné séparément depuis GitHub de l'opérateur
+# Ces packages sont installés dans la cellule d'initialisation du notebook Colab
+
+gradio>=4.0.0
+httpx>=0.25.0
+google-api-python-client>=2.0.0
+# Drive mount: google.colab.drive (natif Colab, pas de pip)

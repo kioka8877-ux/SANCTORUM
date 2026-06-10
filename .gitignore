@@ -1,0 +1,22 @@
+# Audio files (trop lourds pour git — stockés sur Drive)
+*.wav
+*.mp3
+*.flac
+*.ogg
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials
+credentials.json
+token.json

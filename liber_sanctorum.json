@@ -1,0 +1,35 @@
+{
+  "_comment": "CMS CENTRALISÉ — LIBER SANCTORUM. Seul SR_CUSTOS.py est autorisé à modifier fleet_status.",
+  "fleet_status": "pending_sanctification",
+  "bpm": null,
+
+  "f01_dominion": {
+    "status": "idle",
+    "script_text": "",
+    "voice_reference": "",
+    "output_path": ""
+  },
+
+  "f02_celestian": {
+    "status": "idle",
+    "preset_name": "standard_voix_purifiee",
+    "apply_divine_presence": true,
+    "compression_threshold_db": -15.0,
+    "reverb_wet_level": 0.08,
+    "output_path": ""
+  },
+
+  "f03_seraphim": {
+    "status": "idle",
+    "music_canvas": "",
+    "directives_path": "",
+    "output_path": ""
+  },
+
+  "sr_custos": {
+    "last_validation": null,
+    "errors": []
+  },
+
+  "final_output": ""
+}
