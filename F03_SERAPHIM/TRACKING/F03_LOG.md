@@ -1,52 +1,23 @@
-# F03_SERAPHIM — TRACKING LOG
+# F03_SERAPHIM — Journal de Mission
 
-**Nom de code :** SERAPHIM (F03A + F03B)
-**Analogies :** F03A = L'Architecte / F03B = La Machine à Micro-jets
-**Rôle :** F03A produit le JSON directives · F03B exécute la découpe chirurgicale
+> Frégate SERAPHIM — L'Architecte (F03A) + La Machine à Micro-jets (F03B)
+> Pipeline : trend_music.mp3 → directives.json → master_audio_mix.mp3
 
----
+| Champ | Valeur |
+|-------|--------|
+| Frégate A | F03A — L'Architecte |
+| Frégate B | F03B — La Machine à Micro-jets |
+| Moteur analyse | Librosa (BPM + structure) |
+| Moteur découpe | Pydub + pyrubberband |
+| Interface | Gradio headless |
 
-## Format d'entrée
+## Workflow
 
-### F03A — Session Architecte
-```
-## [TIMESTAMP] F03A Session #N
-- Chanson source: fichier.mp3
-- BPM détecté: X bpm
-- Segments définis: N (queue: 1, loops: N-2, tête: 1)
-- Output: directives.json
-- SR_CUSTOS validation: PASS / FAIL
-```
-
-### F03B — Session Machine à Micro-jets
-```
-## [TIMESTAMP] F03B Session #N
-- directives.json: chemin
-- Chanson source: fichier.mp3
-- Segments traités: N
-- Durée totale assemblée: Xs
-- Output: master_audio_mix.mp3
-- SR_CUSTOS validation: PASS / FAIL
-```
+1. **F03A** : Analyser la musique → détecter BPM + sections → éditer timeline → exporter `directives.json`
+2. **F03B** : Lire `directives.json` → découpe chirurgicale → mix avec `voix_purifiee.wav` (ducking) → `master_audio_mix.mp3`
 
 ---
 
-## Valeurs par Défaut Actives
+## Historique des missions
 
-| Paramètre | Valeur |
-|-----------|--------|
-| Volume QUEUE | 100% |
-| Volume LOOP | 80% |
-| Volume TÊTE | 110% |
-| Crossfade transitions | 15ms |
-| Fade in TÊTE | 0ms (attaque franche) |
-| Fade out TÊTE | 300ms |
-| Aimantation beats | Activée |
-
----
-
-## Sessions
-
-*(Aucune session enregistrée — en attente de première exécution)*
-
----
+*(Généré automatiquement par seraphim_a_architect.ipynb et seraphim_b_microjets.ipynb)*
