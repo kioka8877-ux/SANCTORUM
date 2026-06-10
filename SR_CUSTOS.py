@@ -17,9 +17,13 @@ import os
 import hashlib
 from datetime import datetime, timezone
 
-CMS_PATH    = "liber_sanctorum.json"
-CAMPAIGN_LOG = "TRACKING/SR_CAMPAIGN_LOG.md"
-TRANSFER_LOG = "TRACKING/SR_TRANSFER_LOG.md"
+# Paths anchored to this script's directory so logs survive on Drive
+# when notebooks invoke `python SR_CUSTOS.py` from /content/
+_SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+
+CMS_PATH     = os.path.join(_SCRIPT_DIR, "liber_sanctorum.json")
+CAMPAIGN_LOG = os.path.join(_SCRIPT_DIR, "TRACKING", "SR_CAMPAIGN_LOG.md")
+TRANSFER_LOG = os.path.join(_SCRIPT_DIR, "TRACKING", "SR_TRANSFER_LOG.md")
 
 VALID_FRIGATES = ["F01", "F02", "F03A", "F03B"]
 
@@ -138,8 +142,30 @@ def _advance_fleet_status(cms: dict, completed_frigate: str):
         "F03A": "directives_ready",
         "F03B": "audio_ready",
     }
-    if completed_frigate in transitions:
-        cms["fleet_status"] = transitions[completed_frigate]
+    # A-01: validate sequence preconditions before advancing fleet_status
+    preconditions = {
+        "F01":  [],
+        "F02":  ["voice_raw_ready"],
+        "F03A": ["voice_raw_ready"],
+        "F03B": ["directives_ready"],
+    }
+    if completed_frigate not in transitions:
+        return
+    current = cms.get("fleet_status", "pending_sanctification")
+    try:
+        current_idx = FLEET_STATUS_FLOW.index(current)
+    except ValueError:
+        current_idx = 0
+    for req in preconditions.get(completed_frigate, []):
+        try:
+            req_idx = FLEET_STATUS_FLOW.index(req)
+        except ValueError:
+            req_idx = 0
+        if current_idx < req_idx:
+            print(f"[SR_CUSTOS] AVERTISSEMENT: {completed_frigate} check-in"
+                  f" mais '{req}' non atteint (actuel: '{current}'). fleet_status inchangé.")
+            return
+    cms["fleet_status"] = transitions[completed_frigate]
 
 
 def cmd_validate(schema_path: str):

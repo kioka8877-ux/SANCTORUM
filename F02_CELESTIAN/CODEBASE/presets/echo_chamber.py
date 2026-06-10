@@ -11,6 +11,14 @@ from pydub import AudioSegment
 PRESET_NAME = "echo_chamber"
 PRESET_DESCRIPTION = "Écho spatial — profondeur et répétition ambiante"
 
+PRESET_DEFAULTS = {
+    'highpass_hz'     : 80.0,
+    'comp_threshold'  : -18.0,
+    'comp_ratio'      : 3.0,
+    'reverb_room'     : 0.3,
+    'reverb_wet'      : 0.25,
+}
+
 
 def apply(audio_segment: AudioSegment) -> AudioSegment:
     samples = np.array(audio_segment.get_array_of_samples()).astype(np.float32)

@@ -13,6 +13,14 @@ import io
 PRESET_NAME = "standard_voix_purifiee"
 PRESET_DESCRIPTION = "Voix purifiée standard — specs Directive Impériale"
 
+PRESET_DEFAULTS = {
+    'highpass_hz'     : 75.0,
+    'comp_threshold'  : -15.0,
+    'comp_ratio'      : 3.5,
+    'reverb_room'     : 0.2,
+    'reverb_wet'      : 0.08,
+}
+
 
 def apply(audio_segment: AudioSegment) -> AudioSegment:
     samples = np.array(audio_segment.get_array_of_samples()).astype(np.float32)

@@ -11,6 +11,14 @@ from pydub import AudioSegment
 PRESET_NAME = "voix_de_dieu"
 PRESET_DESCRIPTION = "Grave et souveraine — impact lourd, présence divine"
 
+PRESET_DEFAULTS = {
+    'highpass_hz'     : 60.0,
+    'comp_threshold'  : -12.0,
+    'comp_ratio'      : 4.0,
+    'reverb_room'     : 0.45,
+    'reverb_wet'      : 0.2,
+}
+
 
 def apply(audio_segment: AudioSegment) -> AudioSegment:
     samples = np.array(audio_segment.get_array_of_samples()).astype(np.float32)

@@ -11,6 +11,14 @@ from pydub import AudioSegment
 PRESET_NAME = "micro_aeroport"
 PRESET_DESCRIPTION = "Annonce publique — bande filtrée, saturation légère"
 
+PRESET_DEFAULTS = {
+    'highpass_hz'     : 300.0,
+    'comp_threshold'  : -10.0,
+    'comp_ratio'      : 5.0,
+    'reverb_room'     : 0.05,
+    'reverb_wet'      : 0.02,
+}
+
 
 def apply(audio_segment: AudioSegment) -> AudioSegment:
     samples = np.array(audio_segment.get_array_of_samples()).astype(np.float32)

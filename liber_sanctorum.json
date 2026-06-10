@@ -16,6 +16,7 @@
     "apply_divine_presence": true,
     "compression_threshold_db": -15.0,
     "reverb_wet_level": 0.08,
+    "sample_rate": null,
     "output_path": ""
   },
 
