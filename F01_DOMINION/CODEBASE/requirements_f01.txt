@@ -1,8 +1,26 @@
-# F01 DOMINION — Dépendances
-# OmniVoice-Studio fork est cloné séparément depuis GitHub de l'opérateur
-# Ces packages sont installés dans la cellule d'initialisation du notebook Colab
+# F01 DOMINION — Requirements
+# Frégate : Le Prophète — Voice Cloning via OmniVoice-Studio
+# Stack Colab : GPU T4 recommandé
 
-gradio>=4.0.0
-httpx>=0.25.0
-google-api-python-client>=2.0.0
-# Drive mount: google.colab.drive (natif Colab, pas de pip)
+# ── Serveur OmniVoice ────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+httpx>=0.27.0
+python-multipart>=0.0.9
+aiofiles>=23.2.1
+pydantic>=2.7.0
+
+# ── Moteur TTS principal (F5-TTS — même moteur qu'OmniVoice) ────────────
+f5-tts>=0.3.4
+
+# ── Audio I/O & traitement ───────────────────────────────────────────────
+soundfile>=0.12.1
+librosa>=0.10.2
+numpy>=1.26.0
+scipy>=1.13.0
+
+# ── Interface opérateur ──────────────────────────────────────────────────
+gradio>=4.31.0
+
+# ── Utilitaires ─────────────────────────────────────────────────────────
+tqdm>=4.66.0
