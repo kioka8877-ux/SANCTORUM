@@ -59,7 +59,7 @@
 ## [2026-06-10T08:51:02Z] CONSTRUCTION — F03_SERAPHIM : L'Architecte + La Machine à Micro-jets [MANUEL]
 
 ### F03A — seraphim_a_architect.ipynb
-- Cellules : 1 (INIT) · 2 (INSTALL) · 3 (INTERFACE Gradio — L'Architecte)
+- Cellules : 1 (INIT) · 2 (INSTALL) · 3 (INTERFACE Gradio — L'Architecte) · 4 (SR_CUSTOS check-in)
 - Stack : librosa>=0.10.0 · matplotlib · pandas · Gradio (port 7862)
 - Analyse BPM : `librosa.beat.beat_track` — tempo + beat_frames → beat_times
 - Détection sections : MFCC 12 composantes + segmentation agglomérative k = min(6, max(3, dur//15))
