@@ -13,43 +13,51 @@
 
 ## Workflow
 
-1. **F03A** : Analyser la musique → détecter BPM + sections → éditer timeline → exporter `directives.json`
-2. **F03B** : Lire `directives.json` → découpe chirurgicale → mix avec `voix_purifiee.wav` (ducking) → `master_audio_mix.mp3`
+1. **F03A** : Analyser la musique → détecter BPM + sections → éditer timeline → exporter `directives.json` → SR_CUSTOS check-in
+2. **F03B** : Lire `directives.json` → découpe chirurgicale → mix avec `voix_purifiee.wav` (ducking) → `master_audio_mix.mp3` → SR_CUSTOS check-in
 
 ---
 
 ## Phase : CONSTRUCTION
 
-### [2026-06-10T08:51:02Z] CONSTRUCTION TERMINÉE [MANUEL]
+### [2026-06-10T08:51:02Z] CONSTRUCTION TERMINÉE — F03 SERAPHIM COMPLET [MANUEL]
 
-**F03A — L'Architecte (`seraphim_a_architect.ipynb`)**
+**F03A — L'Architecte (`seraphim_a_architect.ipynb`) — 4 cellules**
 
-| Élément | Détail |
-|---------|--------|
-| Cellules | 1 INIT · 2 INSTALL · 3 INTERFACE Gradio (port 7862) |
-| BPM | `librosa.beat.beat_track` → tempo + beat_times (64 beats max affichés) |
-| Sections | MFCC 12 comp. + segmentation agglomérative, k = min(6, max(3, dur//15)) |
-| Visualisation | Waveform + beat grid + spans colorés par section (matplotlib Agg) |
-| Timeline editor | DataFrame 9 col. — role / start / end / loops / speed / reverse / volume_pct / fade_in_ms / fade_out_ms |
-| Rôles | `queue` · `loop` · `tete` · `drop` · `bridge` · `outro` |
-| Params globaux | crossfade_ms (0–200ms) · ducking_db (-24–0 dB, défaut -14) |
-| Export | directives.json → Drive F03_CODEBASE/ + repo local /content/SANCTORUM |
-| Liber update | fleet_status → `directives_ready` · f03_seraphim.status → `directives_ready` |
+| Cellule | Contenu |
+|---------|---------|
+| 1 INIT | Drive mount · SANCTORUM clone/pull · chemins F03 · makedirs · lecture liber · listing musiques IN/ |
+| 2 INSTALL | librosa>=0.10.0 · soundfile · pydub · numpy · scipy · matplotlib · pandas · gradio>=4.31.0 · ffmpeg |
+| 3 INTERFACE | Gradio port 7862 · 4 onglets : Analyse Audio / Éditeur Timeline / Prévisualisation JSON / Statut Flotte |
+| 4 SR_CUSTOS | check-in --frigate F03A --output directives.json · fleet_status → directives_ready · "PROCHAINE ÉTAPE : F03B" |
 
-**F03B — La Machine à Micro-jets (`seraphim_b_microjets.ipynb`)**
+**Détail Cellule 3 :**
+- `analyze_audio` : BPM (`librosa.beat.beat_track`) + sections MFCC 12 comp. agglomératif k=min(6, max(3, dur//15))
+- `plot_analysis` : waveform + beat grid + spans colorés + label sections (matplotlib Agg, fond #0a0a0f)
+- Éditeur timeline : DataFrame 9 col. — role / start / end / loops / speed / reverse / volume_pct / fade_in_ms / fade_out_ms
+- Rôles : `queue` · `loop` · `tete` · `drop` · `bridge` · `outro`
+- `export_directives` : directives.json → Drive F03_CODEBASE/ + repo local /content/SANCTORUM · liber update inline · F03_LOG.md write inline
+- Paramètres globaux : crossfade_ms (0–200ms) · ducking_db (-24–0 dB, défaut -14)
 
-| Élément | Détail |
-|---------|--------|
-| Cellules | 1 INIT · 2 INSTALL · 3 INTERFACE Gradio (port 7863) · 4 SR_CUSTOS check-in |
-| Prérequis INIT | directives.json (F03A) + voix_purifiee.wav (F02_OUT/) + musique (F03_IN/) |
-| Time-stretch | pyrubberband.time_stretch (pitch-preserving) — fallback frame_rate trick pydub |
-| Ducking | Détection régions actives voix chunks 50ms, seuil -45 dBFS, rampe fade ±30ms |
-| Normalisation | normalize_audio(target_dbfs) — slider -12 à -1, défaut -3.0 dBFS |
-| Sortie | mp3 (320k) / wav / flac |
-| Double export | F03_SERAPHIM/OUT/master_audio_mix.{ext} + SHARED/OUT/final_sanctorum.{ext} |
-| Liber update | fleet_status → `audio_ready` · f03_seraphim.status → `done` · final_output → SHARED/OUT/final_sanctorum |
+**F03B — La Machine à Micro-jets (`seraphim_b_microjets.ipynb`) — 4 cellules**
 
-**Fichiers support créés**
+| Cellule | Contenu |
+|---------|---------|
+| 1 INIT | Drive mount · SANCTORUM clone/pull · chemins F02+F03+SHARED · makedirs · check prérequis (directives.json, voix_purifiee.wav, musique) |
+| 2 INSTALL | pydub · pyrubberband · soundfile · numpy · scipy · matplotlib · gradio>=4.31.0 · ffmpeg · rubberband-cli |
+| 3 INTERFACE | Gradio port 7863 · 4 onglets : Assemblage & Mix / Timeline assemblée / Directives JSON / Statut Flotte |
+| 4 SR_CUSTOS | check-in --frigate F03B --output master_audio_mix.mp3 · fleet_status → audio_ready · affiche état final flotte |
+
+**Détail Cellule 3 :**
+- `_time_stretch` : pyrubberband pitch-preserving + fallback frame_rate trick pydub
+- `_duck_music` : détection régions actives voix chunks 50ms, seuil -45 dBFS, rampe fade ±30ms
+- `build_music_canvas` : découpe + reverse + speed + volume + fades + loops + crossfade assemblage
+- `mix_voice_over_music` : overlay voix sur canvas + padding silence si nécessaire
+- `normalize_audio` : target dBFS slider -12 à -1, défaut -3.0 dBFS
+- `plot_timeline` : Gantt segments colorés par rôle
+- Double export : `F03_SERAPHIM/OUT/master_audio_mix.{ext}` + `SHARED/OUT/final_sanctorum.{ext}`
+
+**Fichiers support**
 
 | Fichier | Rôle |
 |---------|------|
