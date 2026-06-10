@@ -1,9 +1,21 @@
-# F03 SERAPHIM (F03A + F03B) — Dépendances
+# F03 SERAPHIM (F03A + F03B) — Requirements
+# F03A : L'Architecte — analyse BPM + éditeur directives
+# F03B : La Machine à Micro-jets — assemblage chirurgical + mix final
 
-gradio>=4.0.0
+# ── Analyse audio (F03A) ─────────────────────────────────────────────────
 librosa>=0.10.0
-pydub>=0.25.1
-numpy>=1.24.0
 soundfile>=0.12.0
+numpy>=1.26.0
+scipy>=1.13.0
+pandas>=2.0.0
+
+# ── Visualisation (F03A) ─────────────────────────────────────────────────
+matplotlib>=3.8.0
+
+# ── Découpe & assemblage (F03B) ──────────────────────────────────────────
+pydub>=0.25.1
 pyrubberband>=0.3.0
-# pyrubberband nécessite rubberband-cli: apt-get install rubberband-cli
+# rubberband-cli requis système : apt-get install rubberband-cli
+
+# ── Interface opérateur ──────────────────────────────────────────────────
+gradio>=4.31.0
