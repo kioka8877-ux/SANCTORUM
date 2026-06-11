@@ -1,0 +1,77 @@
+name: TYRANIDE-CI — SANCTORUM Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke-test-f01:
+    name: "F01 DOMINION — CPU Smoke"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install vaccins (CPU — sans CUDA)
+        run: python3 SHARED/tyranide/ci_smoke.py --install-vaccins
+
+      - name: Smoke test imports
+        id: smoke
+        run: python3 SHARED/tyranide/ci_smoke.py --smoke-test
+        continue-on-error: true
+
+      - name: Upload error log
+        if: steps.smoke.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-error-log
+          path: /tmp/smoke_error.txt
+
+      - name: Report incident to Notion (si token disponible)
+        if: steps.smoke.outcome == 'failure'
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DB_INCIDENTS: ${{ secrets.NOTION_DB_INCIDENTS }}
+        run: |
+          python3 SHARED/tyranide/notion_memory.py --report-incident \
+            --fregate "F01_DOMINION" \
+            --logs "$(cat /tmp/smoke_error.txt 2>/dev/null | head -50 || echo 'no logs')"
+
+      - name: Fail job si smoke ROUGE
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1
+
+  validate-tyranide-json:
+    name: "TYRANIDE — Validate JSON schemas"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate vaccins.json
+        run: python3 -c "
+import json, sys
+with open('SHARED/tyranide/vaccins.json') as f:
+    d = json.load(f)
+assert 'vaccins' in d, 'clé vaccins manquante'
+for v in d['vaccins']:
+    assert 'id' in v and 'package' in v and 'version' in v and 'statut' in v, f'Vaccin incomplet : {v}'
+print(f'[OK] {len(d[\"vaccins\"])} vaccin(s) valide(s)')
+"
+
+      - name: Validate cicatrices.json
+        run: python3 -c "
+import json
+with open('SHARED/tyranide/cicatrices.json') as f:
+    d = json.load(f)
+assert 'cicatrices' in d, 'clé cicatrices manquante'
+for c in d['cicatrices']:
+    assert 'id' in c and 'nom' in c and 'statut' in c, f'Cicatrice incomplète : {c}'
+ouvertes = [c['id'] for c in d['cicatrices'] if c['statut'] == 'OUVERT']
+print(f'[OK] {len(d[\"cicatrices\"])} cicatrice(s) — {len(ouvertes)} ouverte(s) : {ouvertes}')
+"
