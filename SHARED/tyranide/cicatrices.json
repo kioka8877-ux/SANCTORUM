@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.1",
+  "projet": "SANCTORUM",
+  "last_updated": "2026-06-11",
+  "cicatrices": [
+    {
+      "id": "CIC-001",
+      "nom": "torchvision::nms absent",
+      "signature": "RuntimeError: operator torchvision::nms does not exist",
+      "symptome": "torchvision._meta_registrations plante au chargement",
+      "cause_racine": "torch et torchvision versions incompatibles — mismatch lors de l'install flottante",
+      "fix_valide": "pip install torch==2.4.1+cu121 torchvision==0.19.1+cu121 torchaudio==2.4.1+cu121 --extra-index-url https://download.pytorch.org/whl/cu121",
+      "compartiment": "C2",
+      "fregate": "F01_DOMINION",
+      "statut": "RÉSOLU",
+      "vaccins_ref": ["VAC-001", "VAC-002", "VAC-003"],
+      "commit_fix": "ec17971e900f",
+      "fois_rencontree": 1,
+      "date_decouverte": "2026-06-10"
+    },
+    {
+      "id": "CIC-002",
+      "nom": "torch.float8_e8m0fnu absent",
+      "signature": "AttributeError: module 'torch' has no attribute 'float8_e8m0fnu'",
+      "symptome": "transformers.pipeline FAIL — Could not import module pipeline",
+      "cause_racine": "transformers >=4.45 utilise torch.float8_e8m0fnu qui n'existe que dans torch >=2.5. f5-tts tire la dernière version de transformers sans contrainte.",
+      "fix_valide": "pip install transformers==4.44.2 APRES f5-tts",
+      "compartiment": "C2",
+      "fregate": "F01_DOMINION",
+      "statut": "RÉSOLU",
+      "vaccins_ref": ["VAC-004"],
+      "commit_fix": "1ec91af1452c",
+      "fois_rencontree": 3,
+      "date_decouverte": "2026-06-10",
+      "robot_patch": "ROBOT PATCH A — détecte absence float8_e8m0fnu → force transformers==4.44.2 → vide cache modules"
+    },
+    {
+      "id": "CIC-003",
+      "nom": "ServerReloader absent dans gradio",
+      "signature": "ImportError: cannot import name 'ServerReloader' from 'gradio.utils'",
+      "symptome": "C4 plante au launch de l'interface Gradio",
+      "cause_racine": "gradio version flottante tire une version incompatible avec gradio.http_server. websockets >=12 supprime prepare_ctrl.",
+      "fix_valide": "pip install gradio==4.44.0 websockets==11.0.3",
+      "compartiment": "C4",
+      "fregate": "F01_DOMINION",
+      "statut": "RÉSOLU",
+      "vaccins_ref": ["VAC-005", "VAC-006"],
+      "commit_fix": "1ec91af1452c",
+      "fois_rencontree": 2,
+      "date_decouverte": "2026-06-11"
+    },
+    {
+      "id": "CIC-004",
+      "nom": "EntryNotFoundError absent dans huggingface_hub",
+      "signature": "ImportError: cannot import name 'EntryNotFoundError' from 'huggingface_hub.errors'",
+      "symptome": "transformers.pipeline FAIL — huggingface_hub.repocard ne peut pas importer EntryNotFoundError",
+      "cause_racine": "CONFLIT IRRECONCILIABLE — gradio 4.44 exige hf_hub<0.25 (besoin HfFolder supprimé en 0.25+), transformers 4.44.2 exige hf_hub>=0.26 (besoin EntryNotFoundError dans errors.py). Les deux ne peuvent pas coexister avec ces versions.",
+      "fix_valide": "NON RÉSOLU — piste 1: gradio 5.x qui ne dépend plus de HfFolder. piste 2: transformers<=4.41 compatible hf_hub 0.24",
+      "compartiment": "C2+C4",
+      "fregate": "F01_DOMINION",
+      "statut": "OUVERT",
+      "vaccins_ref": ["VAC-007"],
+      "commit_fix": null,
+      "fois_rencontree": 2,
+      "date_decouverte": "2026-06-11",
+      "pistes_echec": [
+        "gradio==4.44.2 — version inexistante sur PyPI",
+        "gradio==4.44.0 + hf_hub==0.24.0 — EntryNotFoundError manquant dans transformers",
+        "hf_hub==0.24.0 + transformers==4.44.2 — conflit direct non résolvable dans même env"
+      ]
+    }
+  ]
+}
