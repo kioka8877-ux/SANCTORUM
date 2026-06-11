@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.1",
+  "projet": "SANCTORUM",
+  "last_updated": "2026-06-11",
+  "maintenu_par": "TYRANIDE — mémoire immunitaire de la flotte",
+  "vaccins": [
+    {
+      "id": "VAC-001",
+      "package": "torch",
+      "version": "2.4.1+cu121",
+      "extra_index": "https://download.pytorch.org/whl/cu121",
+      "fregate": "F01_DOMINION",
+      "compartiment": "C2",
+      "statut": "VALIDÉ",
+      "cicatrice_ref": "CIC-001",
+      "note": "Triplet torch épinglé — nms opérateur OK avec cette version"
+    },
+    {
+      "id": "VAC-002",
+      "package": "torchvision",
+      "version": "0.19.1+cu121",
+      "extra_index": "https://download.pytorch.org/whl/cu121",
+      "fregate": "F01_DOMINION",
+      "compartiment": "C2",
+      "statut": "VALIDÉ",
+      "cicatrice_ref": "CIC-001",
+      "note": "Triplet torch — torchvision::nms accessible"
+    },
+    {
+      "id": "VAC-003",
+      "package": "torchaudio",
+      "version": "2.4.1+cu121",
+      "extra_index": "https://download.pytorch.org/whl/cu121",
+      "fregate": "F01_DOMINION",
+      "compartiment": "C2",
+      "statut": "VALIDÉ",
+      "cicatrice_ref": "CIC-001",
+      "note": "Triplet torch — version exacte compatible"
+    },
+    {
+      "id": "VAC-004",
+      "package": "transformers",
+      "version": "4.44.2",
+      "extra_index": null,
+      "fregate": "F01_DOMINION",
+      "compartiment": "C2",
+      "statut": "VALIDÉ",
+      "cicatrice_ref": "CIC-002",
+      "note": "Dernière version sans float8_e8m0fnu — compatible torch 2.4.x"
+    },
+    {
+      "id": "VAC-005",
+      "package": "gradio",
+      "version": "4.44.0",
+      "extra_index": null,
+      "fregate": "F01_DOMINION",
+      "compartiment": "C4",
+      "statut": "VALIDÉ",
+      "cicatrice_ref": "CIC-003",
+      "note": "ServerReloader présent dans cette version"
+    },
+    {
+      "id": "VAC-006",
+      "package": "websockets",
+      "version": "11.0.3",
+      "extra_index": null,
+      "fregate": "F01_DOMINION",
+      "compartiment": "C4",
+      "statut": "VALIDÉ",
+      "cicatrice_ref": "CIC-003",
+      "note": "prepare_ctrl présent — versions >=12 cassent gradio 4.x"
+    },
+    {
+      "id": "VAC-007",
+      "package": "huggingface_hub",
+      "version": "0.24.0",
+      "extra_index": null,
+      "fregate": "F01_DOMINION",
+      "compartiment": "C2",
+      "statut": "CONFLIT_OUVERT",
+      "cicatrice_ref": "CIC-004",
+      "note": "gradio 4.44 exige <0.25 (HfFolder) — MAIS transformers 4.44.2 exige >=0.26 (EntryNotFoundError). Conflit non résolu."
+    }
+  ]
+}
