@@ -1,7 +1,10 @@
-name: F01 DOMINION — CPU Test OmniVoice
+name: F01 DOMINION - CPU Test OmniVoice
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dominion-cpu-test.yml"
 
 jobs:
   dominion-cpu-test:
@@ -15,85 +18,69 @@ jobs:
 
       - name: System info
         run: |
-          echo "=== RESSOURCES DISPONIBLES ==="
+          echo "=== RESSOURCES ==="
           echo "RAM total  : $(cat /proc/meminfo | grep MemTotal | awk '{printf "%.1f GB", $2/1024/1024}')"
           echo "RAM libre  : $(cat /proc/meminfo | grep MemAvailable | awk '{printf "%.1f GB", $2/1024/1024}')"
           echo "CPU cores  : $(nproc)"
           echo "Disk libre : $(df -h / | tail -1 | awk '{print $4}')"
           echo "Python     : $(python3 --version)"
-          echo "================================"
 
-      - name: Install OmniVoice (CPU)
+      - name: Install OmniVoice CPU
         run: |
           START=$(date +%s)
-          echo "[INSTALL] Installation OmniVoice + deps CPU..."
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu -q
-          pip install omnivoice -q
-          pip install psutil -q
+          pip install omnivoice psutil -q
           END=$(date +%s)
-          echo "[INSTALL] Termine en $((END - START))s"
-          python3 -c "import omnivoice; print('[IMPORT] omnivoice OK')"
+          echo "[INSTALL] ${$((END - START))}s"
+          python3 -c "import omnivoice; print('[IMPORT] OK')"
 
-      - name: Download model from HuggingFace
+      - name: Download model
         run: |
-          START=$(date +%s)
-          echo "[MODEL] Telechargement k2-fsa/OmniVoice depuis HuggingFace..."
-          python3 -c "
+          python3 - <<'EOF'
 import time
 from huggingface_hub import snapshot_download
 start = time.time()
-path = snapshot_download(repo_id='k2-fsa/OmniVoice', local_dir='/tmp/omnivoice_model')
+path = snapshot_download(repo_id="k2-fsa/OmniVoice", local_dir="/tmp/omnivoice_model")
 elapsed = time.time() - start
 import subprocess
-size = subprocess.check_output(['du', '-sh', '/tmp/omnivoice_model']).decode().split()[0]
-print(f'[MODEL] Telecharge en {elapsed:.0f}s — taille : {size}')
-"
-          END=$(date +%s)
-          echo "[MODEL] Total download : $((END - START))s"
-          echo "RAM apres dl : $(cat /proc/meminfo | grep MemAvailable | awk '{printf "%.1f GB", $2/1024/1024}')"
+size = subprocess.check_output(["du", "-sh", "/tmp/omnivoice_model"]).decode().split()[0]
+print(f"[MODEL] {elapsed:.0f}s — {size}")
+EOF
 
-      - name: Inference CPU — segment test
+      - name: Inference CPU
         run: |
-          START=$(date +%s)
-          python3 -c "
+          python3 - <<'EOF'
 import time, subprocess, os, psutil
 
-text = 'La force de Magnus reside dans la comprehension des lois qui gouvernent l univers. Chaque equation est une verite eternelle.'
-
-print(f'[INFER] Texte  : {text[:70]}')
-print(f'[INFER] Mode   : auto voice (sans reference)')
-
+text = "La force de Magnus reside dans la comprehension des lois qui gouvernent l univers. Chaque equation est une verite eternelle."
 ram_before = psutil.virtual_memory().available / 1024**3
-print(f'[INFER] RAM avant : {ram_before:.1f} GB')
+print(f"[INFER] RAM avant : {ram_before:.1f} GB")
 
 start = time.time()
 result = subprocess.run(
-    ['omnivoice-infer',
-     '--model', '/tmp/omnivoice_model',
-     '--text', text,
-     '--output', '/tmp/test_output.wav'],
+    ["omnivoice-infer", "--model", "/tmp/omnivoice_model",
+     "--text", text, "--output", "/tmp/test_output.wav"],
     capture_output=True, text=True, timeout=600
 )
 elapsed = time.time() - start
 
 if result.returncode != 0:
-    print(f'[ECHEC] returncode={result.returncode}')
+    print(f"[ECHEC] code={result.returncode}")
     print(result.stderr[-3000:])
-else:
-    size = os.path.getsize('/tmp/test_output.wav')
-    ram_after = psutil.virtual_memory().available / 1024**3
-    print(f'[OK] Temps generation : {elapsed:.1f}s')
-    print(f'[OK] Taille WAV       : {size/1024:.0f} KB')
-    print(f'[OK] RAM consommee    : {ram_before - ram_after:.1f} GB')
-    audio_dur = size / (2 * 22050)
-    print(f'[OK] Duree estimee    : {audio_dur:.1f}s audio')
-    rtf = elapsed / max(audio_dur, 0.1)
-    print(f'[OK] RTF CPU          : {rtf:.2f}x (1.0 = temps reel)')
-"
-          END=$(date +%s)
-          echo "[INFER] Job total : $((END - START))s"
+    raise SystemExit(1)
 
-      - name: Upload audio de test
+size = os.path.getsize("/tmp/test_output.wav")
+ram_after = psutil.virtual_memory().available / 1024**3
+audio_dur = size / (2 * 22050)
+rtf = elapsed / max(audio_dur, 0.1)
+print(f"[OK] Temps   : {elapsed:.1f}s")
+print(f"[OK] WAV     : {size/1024:.0f} KB")
+print(f"[OK] RAM     : {ram_before - ram_after:.1f} GB consommee")
+print(f"[OK] Audio   : {audio_dur:.1f}s")
+print(f"[OK] RTF     : {rtf:.2f}x temps reel")
+EOF
+
+      - name: Upload audio
         if: always()
         uses: actions/upload-artifact@v4
         with:
