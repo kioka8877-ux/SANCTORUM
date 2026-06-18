@@ -1,13 +1,27 @@
 {
-  "_comment": "CMS CENTRALISÉ — LIBER SANCTORUM. Seul SR_CUSTOS.py est autorisé à modifier fleet_status.",
+  "_comment": "CMS CENTRALISE — LIBER SANCTORUM. Seul SR_CUSTOS.py est autorise a modifier fleet_status.",
   "fleet_status": "pending_sanctification",
   "bpm": null,
 
   "f01_dominion": {
-    "status": "idle",
+    "status": "benchmark_validated",
     "script_text": "",
     "voice_reference": "",
-    "output_path": ""
+    "output_path": "",
+    "benchmark": {
+      "date": "2026-06-18",
+      "model": "k2-fsa/OmniVoice",
+      "runner": "ubuntu-latest",
+      "ram_available_gb": 15.0,
+      "cpu_cores": 4,
+      "model_size_gb": 3.1,
+      "model_download_s": 11,
+      "inference_audio_s": 8.4,
+      "inference_time_s": 523.7,
+      "rtf": 62.32,
+      "architecture": "10_workers_parallel",
+      "estimated_full_cycle_min": 7
+    }
   },
 
   "f02_celestian": {
