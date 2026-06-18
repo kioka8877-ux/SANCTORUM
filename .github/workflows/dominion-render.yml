@@ -1,0 +1,88 @@
+name: dominion-render
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: "ID du projet (ex: 004)"
+        required: true
+        default: "004"
+      ref_audio:
+        description: "Chemin voix ref dans ANGRON-V2 (optionnel)"
+        required: false
+        default: ""
+
+jobs:
+
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Split script en chunks
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          PROJECT_ID: ${{ github.event.inputs.project_id }}
+          N_WORKERS: "10"
+        run: python F01_DOMINION/CODEBASE/dominion_split.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunks-json
+          path: /tmp/chunks.json
+
+  render:
+    needs: split
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        chunk_id: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: chunks-json
+          path: /tmp
+      - name: Install omnivoice
+        run: pip install -q omnivoice huggingface_hub
+      - name: Generer chunk
+        env:
+          CHUNK_ID: ${{ matrix.chunk_id }}
+          REF_AUDIO: ${{ github.event.inputs.ref_audio }}
+          HF_HUB_DISABLE_PROGRESS_BARS: "1"
+        run: python F01_DOMINION/CODEBASE/dominion_worker.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.chunk_id }}
+          path: /tmp/chunk_${{ matrix.chunk_id }}.wav
+
+  concat:
+    needs: render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chunk-*
+          path: /tmp/chunks
+          merge-multiple: true
+      - name: Deplacer chunks vers /tmp
+        run: |
+          cp /tmp/chunks/chunk_*.wav /tmp/ 2>/dev/null || true
+          ls /tmp/chunk_*.wav
+      - name: Install pydub
+        run: pip install -q pydub
+      - name: Concat et push vers ANGRON-V2
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          PROJECT_ID: ${{ github.event.inputs.project_id }}
+          N_WORKERS: "10"
+        run: python F01_DOMINION/CODEBASE/dominion_concat.py
