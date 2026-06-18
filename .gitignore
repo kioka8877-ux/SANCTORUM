@@ -20,3 +20,6 @@ Thumbs.db
 # Credentials
 credentials.json
 token.json
+
+# Exception — voix reference clonage
+!SHARED/IN/ref_voice.mp3
