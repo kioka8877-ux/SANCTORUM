@@ -24,27 +24,37 @@ def fetch_script(project_id):
 
 
 def extract_spoken(md):
-    lines = md.split("\n")
+    lines = md.split("
+")
     spoken = []
     skip = False
+
     for line in lines:
+        # Stop at metadata/notes sections — not spoken
+        if re.match(r"#+.*(METADONN|NOTES LACERAT|NOTES |YOUTUBE)", line, re.IGNORECASE):
+            break
+
         if re.match(r"#+.*HOOK VISUEL", line):
             skip = True
         elif re.match(r"#+", line) and "HOOK VISUEL" not in line:
             skip = False
+
         if skip:
             continue
         if re.match(r"#+", line):
             continue
-        if re.match(r"\*\[|\*Le |---|\*\*Format|\*\*Mode|\*\*Langue|\*\*Dur", line):
+        # Filter header metadata fields and stage directions
+        if re.match(r"\*\[|\*Le |---|\*\*Format|\*\*Mode|\*\*Langue|\*\*Dur|\*\*Concept|\*\*Hook|\*\*Ton", line):
             continue
+
         text = re.sub(r"\[ANIM:[^\]]*\]", "", line)
-        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
-        text = re.sub(r"\*([^*]+)\*", r"\1", text)
+        text = re.sub(r"\*\*([^*]+)\*\*", r"", text)
+        text = re.sub(r"\*([^*]+)\*", r"", text)
         text = re.sub(r"\[[^\]]*\]", "", text)
         text = re.sub(r"\s+", " ", text).strip()
         if text:
             spoken.append(text)
+
     return " ".join(spoken)
 
 
@@ -68,7 +78,7 @@ chunks = split_chunks(spoken, N)
 
 print(f"[SPLIT] {len(spoken)} chars => {len(chunks)} chunks")
 for k, v in chunks.items():
-    print(f"  chunk {k}: {len(v)} chars | {v[:60]}...")
+    print(f"  chunk {k}: {len(v)} chars | {v[:80]}...")
 
 with open("/tmp/chunks.json", "w", encoding="utf-8") as f:
     json.dump(chunks, f, ensure_ascii=False, indent=2)
