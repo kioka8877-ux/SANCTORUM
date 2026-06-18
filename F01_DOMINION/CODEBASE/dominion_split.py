@@ -24,8 +24,7 @@ def fetch_script(project_id):
 
 
 def extract_spoken(md):
-    lines = md.split("
-")
+    lines = md.splitlines()
     spoken = []
     skip = False
 
@@ -48,8 +47,8 @@ def extract_spoken(md):
             continue
 
         text = re.sub(r"\[ANIM:[^\]]*\]", "", line)
-        text = re.sub(r"\*\*([^*]+)\*\*", r"", text)
-        text = re.sub(r"\*([^*]+)\*", r"", text)
+        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+        text = re.sub(r"\*([^*]+)\*", r"\1", text)
         text = re.sub(r"\[[^\]]*\]", "", text)
         text = re.sub(r"\s+", " ", text).strip()
         if text:
