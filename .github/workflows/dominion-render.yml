@@ -102,8 +102,11 @@ jobs:
           merge-multiple: true
       - name: Deplacer chunks vers /tmp
         run: cp /tmp/chunks/chunk_*.wav /tmp/ 2>/dev/null; ls /tmp/chunk_*.wav
-      - name: Install pydub
-        run: pip install -q pydub
+      - name: Install ffmpeg et pydub
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends --fix-missing ffmpeg
+          pip install -q pydub
       - name: Concat et push vers ANGRON-V2
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
