@@ -28,8 +28,41 @@ jobs:
           name: chunks-json
           path: /tmp/chunks.json
 
+  model-prep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install huggingface_hub
+        run: pip install -q huggingface_hub
+      - name: Download OmniVoice model once
+        run: |
+          python3 -c "
+from huggingface_hub import snapshot_download
+import time, sys
+for attempt in range(3):
+    try:
+        snapshot_download(repo_id='k2-fsa/OmniVoice', local_dir='/tmp/omnivoice_model')
+        print('Model downloaded OK')
+        break
+    except Exception as e:
+        print(f'Attempt {attempt+1} failed: {e}')
+        if attempt < 2:
+            time.sleep(30)
+        else:
+            sys.exit(1)
+"
+      - name: Package model as tar
+        run: tar -czf /tmp/omnivoice_model.tar.gz -C /tmp omnivoice_model
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omnivoice-model
+          path: /tmp/omnivoice_model.tar.gz
+          retention-days: 1
+
   render:
-    needs: split
+    needs: [split, model-prep]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -44,17 +77,24 @@ jobs:
         with:
           name: chunks-json
           path: /tmp
+      - uses: actions/download-artifact@v4
+        with:
+          name: omnivoice-model
+          path: /tmp
+      - name: Extract model
+        run: tar -xzf /tmp/omnivoice_model.tar.gz -C /tmp
       - name: Install dependances
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends --fix-missing ffmpeg
-          pip install -q omnivoice huggingface_hub openai-whisper
+          pip install -q omnivoice openai-whisper
       - name: Generer chunk
         env:
           CHUNK_ID: ${{ matrix.chunk_id }}
           PROJECT_ID: ${{ github.event.inputs.project_id }}
           GH_PAT: ${{ secrets.GH_PAT }}
           HF_HUB_DISABLE_PROGRESS_BARS: "1"
+          OMNIVOICE_MODEL_PATH: "/tmp/omnivoice_model"
         run: python F01_DOMINION/CODEBASE/dominion_worker.py
       - uses: actions/upload-artifact@v4
         with:
