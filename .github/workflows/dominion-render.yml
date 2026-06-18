@@ -31,29 +31,15 @@ jobs:
   model-prep:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install huggingface_hub
         run: pip install -q huggingface_hub
-      - name: Download OmniVoice model once
-        run: |
-          python3 -c "
-from huggingface_hub import snapshot_download
-import time, sys
-for attempt in range(3):
-    try:
-        snapshot_download(repo_id='k2-fsa/OmniVoice', local_dir='/tmp/omnivoice_model')
-        print('Model downloaded OK')
-        break
-    except Exception as e:
-        print(f'Attempt {attempt+1} failed: {e}')
-        if attempt < 2:
-            time.sleep(30)
-        else:
-            sys.exit(1)
-"
-      - name: Package model as tar
+      - name: Download OmniVoice model
+        run: python F01_DOMINION/CODEBASE/model_prep.py
+      - name: Package model
         run: tar -czf /tmp/omnivoice_model.tar.gz -C /tmp omnivoice_model
       - uses: actions/upload-artifact@v4
         with:
