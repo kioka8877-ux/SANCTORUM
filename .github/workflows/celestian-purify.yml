@@ -1,0 +1,29 @@
+name: celestian-purify
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: "ID du projet (ex: 004)"
+        required: true
+        default: "004"
+
+jobs:
+  purify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends --fix-missing ffmpeg
+      - name: Install dependances DSP
+        run: pip install -q pedalboard pydub soundfile numpy scipy pyloudnorm
+      - name: Purifier voix
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          PROJECT_ID: ${{ github.event.inputs.project_id }}
+        run: python F02_CELESTIAN/CODEBASE/celestian.py
