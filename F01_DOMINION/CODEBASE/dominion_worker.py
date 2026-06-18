@@ -1,4 +1,4 @@
-import os, json, sys, time, subprocess, wave, struct, tempfile
+import os, json, sys, time, subprocess, wave, struct
 import urllib.request, base64
 from huggingface_hub import snapshot_download
 
@@ -31,14 +31,43 @@ if TOKEN:
     try:
         req = urllib.request.Request(ref_url, headers={"Authorization": f"token {TOKEN}"})
         with urllib.request.urlopen(req) as r:
-            data = json.load(r)
-        audio_bytes = base64.b64decode(data["content"])
-        ref_audio_path = "/tmp/ref_voice.mp3"
-        with open(ref_audio_path, "wb") as f:
+            meta = json.load(r)
+
+        # Fichier > 1MB : GitHub ne retourne pas content, utiliser download_url
+        if meta.get("content") and meta.get("encoding") == "base64":
+            audio_bytes = base64.b64decode(meta["content"])
+        elif meta.get("download_url"):
+            dl_req = urllib.request.Request(
+                meta["download_url"],
+                headers={"Authorization": f"token {TOKEN}"}
+            )
+            with urllib.request.urlopen(dl_req) as r:
+                audio_bytes = r.read()
+        else:
+            raise RuntimeError("Pas de contenu ni de download_url")
+
+        raw_path = "/tmp/ref_voice_raw.mp3"
+        with open(raw_path, "wb") as f:
             f.write(audio_bytes)
         print(f"[REF] ref_voice.mp3 telecharge ({len(audio_bytes)//1024} KB)")
+
+        # Conversion WAV — force format mp3 pour headers non-standard (Snaptik)
+        ref_wav = "/tmp/ref_voice.wav"
+        conv = subprocess.run(
+            ["ffmpeg", "-y", "-f", "mp3", "-i", raw_path,
+             "-ar", "24000", "-ac", "1", ref_wav],
+            capture_output=True
+        )
+        if conv.returncode == 0:
+            ref_audio_path = ref_wav
+            print(f"[REF] Converti en WAV OK")
+        else:
+            print(f"[REF] Conversion WAV echouee — mode auto_voice")
+            print(conv.stderr.decode()[-500:])
+            ref_audio_path = ""
+
     except Exception as e:
-        print(f"[REF] Introuvable ou erreur: {e} — mode auto_voice")
+        print(f"[REF] Erreur: {e} — mode auto_voice")
         ref_audio_path = ""
 
 # ── Auto-transcription de la voix reference (si disponible) ──────────────
