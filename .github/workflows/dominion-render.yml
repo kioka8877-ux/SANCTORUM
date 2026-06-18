@@ -46,7 +46,8 @@ jobs:
           path: /tmp
       - name: Install dependances
         run: |
-          sudo apt-get install -y ffmpeg --quiet
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends --fix-missing ffmpeg
           pip install -q omnivoice huggingface_hub openai-whisper
       - name: Generer chunk
         env:
