@@ -1,10 +1,10 @@
 import os, json, sys, time, subprocess, wave, struct
 import urllib.request, base64
-from huggingface_hub import snapshot_download
 
 CHUNK_ID    = os.environ["CHUNK_ID"]
 PROJECT_ID  = os.environ.get("PROJECT_ID", "")
 TOKEN       = os.environ.get("GH_PAT", "")
+MODEL_PATH  = os.environ.get("OMNIVOICE_MODEL_PATH", "/tmp/omnivoice_model")
 output_path = f"/tmp/chunk_{CHUNK_ID}.wav"
 
 # ── Lecture du chunk ──────────────────────────────────────────────────────
@@ -33,7 +33,6 @@ if TOKEN:
         with urllib.request.urlopen(req) as r:
             meta = json.load(r)
 
-        # Fichier > 1MB : GitHub ne retourne pas content, utiliser download_url
         if meta.get("content") and meta.get("encoding") == "base64":
             audio_bytes = base64.b64decode(meta["content"])
         elif meta.get("download_url"):
@@ -51,7 +50,6 @@ if TOKEN:
             f.write(audio_bytes)
         print(f"[REF] ref_voice.mp3 telecharge ({len(audio_bytes)//1024} KB)")
 
-        # Conversion WAV — force format mp3 pour headers non-standard (Snaptik)
         ref_wav = "/tmp/ref_voice.wav"
         conv = subprocess.run(
             ["ffmpeg", "-y", "-f", "mp3", "-i", raw_path,
@@ -63,14 +61,13 @@ if TOKEN:
             print(f"[REF] Converti en WAV OK")
         else:
             print(f"[REF] Conversion WAV echouee — mode auto_voice")
-            print(conv.stderr.decode()[-500:])
             ref_audio_path = ""
 
     except Exception as e:
         print(f"[REF] Erreur: {e} — mode auto_voice")
         ref_audio_path = ""
 
-# ── Auto-transcription de la voix reference (si disponible) ──────────────
+# ── Auto-transcription de la voix reference ──────────────────────────────
 if ref_audio_path:
     try:
         import whisper
@@ -82,15 +79,17 @@ if ref_audio_path:
         print(f"[WHISPER] Erreur transcription: {e} — ref_text vide")
         ref_text = ""
 
-# ── Telechargement modele OmniVoice ──────────────────────────────────────
-t0 = time.time()
-snapshot_download(repo_id="k2-fsa/OmniVoice", local_dir="/tmp/omnivoice_model")
-print(f"[MODEL] {time.time() - t0:.1f}s — pret")
+# ── Modele OmniVoice — depuis artifact, pas HuggingFace ──────────────────
+print(f"[MODEL] Utilisation modele depuis {MODEL_PATH}")
+if not os.path.exists(MODEL_PATH):
+    print(f"[MODEL] ERREUR — modele absent de {MODEL_PATH}")
+    sys.exit(1)
+print(f"[MODEL] OK")
 
 # ── Inference OmniVoice ───────────────────────────────────────────────────
 cmd = [
     "omnivoice-infer",
-    "--model", "/tmp/omnivoice_model",
+    "--model", MODEL_PATH,
     "--text", text,
     "--language", "fr",
     "--output", output_path,
@@ -100,7 +99,7 @@ if ref_audio_path and os.path.exists(ref_audio_path):
     print("[MODE] voice_clone")
     if ref_text:
         cmd += ["--ref_text", ref_text]
-        print(f"[MODE] + ref_text fourni")
+        print("[MODE] + ref_text fourni")
 else:
     print("[MODE] auto_voice")
 
