@@ -1,0 +1,31 @@
+name: dominion-build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "F01_DOMINION/Dockerfile"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push DOMINION image
+        uses: docker/build-push-action@v5
+        with:
+          context: F01_DOMINION
+          file: F01_DOMINION/Dockerfile
+          push: true
+          tags: ghcr.io/kioka8877-ux/dominion:latest
