@@ -12,11 +12,9 @@ jobs:
 
   split:
     runs-on: ubuntu-latest
+    container: ghcr.io/kioka8877-ux/dominion:latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
       - name: Split script en chunks
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
@@ -30,23 +28,17 @@ jobs:
 
   model-prep:
     runs-on: ubuntu-latest
+    container: ghcr.io/kioka8877-ux/dominion:latest
     steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          df -h /
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Cache OmniVoice model
+        id: model-cache
+        uses: actions/cache@v4
         with:
-          python-version: "3.11"
-      - name: Install huggingface_hub
-        run: pip install -q huggingface_hub
+          path: /tmp/omnivoice_model
+          key: omnivoice-model-v1
       - name: Download OmniVoice model
+        if: steps.model-cache.outputs.cache-hit != 'true'
         run: python F01_DOMINION/CODEBASE/model_prep.py
       - name: Package model
         run: tar -czf /tmp/omnivoice_model.tar.gz -C /tmp omnivoice_model
@@ -59,24 +51,13 @@ jobs:
   render:
     needs: [split, model-prep]
     runs-on: ubuntu-latest
+    container: ghcr.io/kioka8877-ux/dominion:latest
     strategy:
       matrix:
         chunk_id: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
       fail-fast: false
     steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          df -h /
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
       - uses: actions/download-artifact@v4
         with:
           name: chunks-json
@@ -87,11 +68,6 @@ jobs:
           path: /tmp
       - name: Extract model
         run: tar -xzf /tmp/omnivoice_model.tar.gz -C /tmp
-      - name: Install dependances
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends --fix-missing ffmpeg
-          pip install -q omnivoice openai-whisper
       - name: Generer chunk
         env:
           CHUNK_ID: ${{ matrix.chunk_id }}
@@ -108,11 +84,9 @@ jobs:
   concat:
     needs: render
     runs-on: ubuntu-latest
+    container: ghcr.io/kioka8877-ux/dominion:latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
       - uses: actions/download-artifact@v4
         with:
           pattern: chunk-*
@@ -120,11 +94,6 @@ jobs:
           merge-multiple: true
       - name: Deplacer chunks vers /tmp
         run: cp /tmp/chunks/chunk_*.wav /tmp/ 2>/dev/null; ls /tmp/chunk_*.wav
-      - name: Install ffmpeg et pydub
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends --fix-missing ffmpeg
-          pip install -q pydub
       - name: Concat et push vers ANGRON-V2
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
