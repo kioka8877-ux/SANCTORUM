@@ -1,0 +1,109 @@
+name: SANCTORUM - F03B SERAPHIM Mix
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: "ID projet (ex: 004)"
+        required: true
+        default: "004"
+      music_file:
+        description: "Nom du fichier musique dans F03_SERAPHIM/IN/ (ex: music_004.mp3)"
+        required: true
+      segments:
+        description: "JSON segments operateur — copie depuis le viewer HTML"
+        required: true
+        default: '[{"role":"queue","start":0,"end":9},{"role":"loop","start":9,"end":24},{"role":"tete","start":24,"end":38}]'
+
+jobs:
+  seraphim-oracle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout SANCTORUM
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Install deps
+        run: |
+          pip install --quiet \
+            librosa==0.10.2 soundfile numpy scipy matplotlib \
+            anthropic pydub
+
+      - name: Download voice + script + whisper from ANGRON-V2
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          PID="${{ inputs.project_id }}"
+          BASE="https://raw.githubusercontent.com/kioka8877-ux/ANGRON-V2/main"
+
+          # Voice
+          curl -sfL -H "Authorization: token $GH_PAT" \
+            "$BASE/F02_LACERAT/IN/voice_${PID}.mp3" \
+            -o /tmp/voice.mp3 \
+          && echo "[DL] voice OK" \
+          || (echo "ERREUR: voice_${PID}.mp3 introuvable"; exit 1)
+
+          # Script (optional)
+          curl -sfL -H "Authorization: token $GH_PAT" \
+            "$BASE/F01_SANGUIS/OUT/script_${PID}.md" \
+            -o /tmp/script.md 2>/dev/null || echo "[DL] script absent - OK"
+
+          # Whisper timestamps (optional)
+          curl -sfL -H "Authorization: token $GH_PAT" \
+            "$BASE/F02_LACERAT/OUT/whisper_timestamps_${PID}.json" \
+            -o /tmp/whisper.json 2>/dev/null || echo "[DL] whisper absent - OK"
+
+      - name: Run BPM analysis
+        run: |
+          MUSIC="F03_SERAPHIM/IN/${{ inputs.music_file }}"
+          mkdir -p F03_SERAPHIM/OUT
+          python3 F03_SERAPHIM/CODEBASE/seraphim_a.py \
+            --phase        analyze \
+            --music        "$MUSIC" \
+            --output-json  /tmp/analysis.json \
+            --output-html  /tmp/viewer_tmp.html
+
+      - name: Oracle Claude — enrichir les segments
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          SCRIPT_ARG=""
+          [ -f /tmp/script.md ]  && SCRIPT_ARG="--script /tmp/script.md"
+          WHISPER_ARG=""
+          [ -f /tmp/whisper.json ] && WHISPER_ARG="--whisper /tmp/whisper.json"
+
+          python3 F03_SERAPHIM/CODEBASE/seraphim_a.py \
+            --phase            oracle \
+            --analysis-json    /tmp/analysis.json \
+            --segments         '${{ inputs.segments }}' \
+            $SCRIPT_ARG \
+            $WHISPER_ARG \
+            --output-directives /tmp/directives.json
+
+          cat /tmp/directives.json
+
+      - name: Assemble mix + push vers ANGRON-V2
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          MUSIC="F03_SERAPHIM/IN/${{ inputs.music_file }}"
+          python3 F03_SERAPHIM/CODEBASE/seraphim_b.py \
+            --directives  /tmp/directives.json \
+            --music       "$MUSIC" \
+            --voice       /tmp/voice.mp3 \
+            --output      /tmp/master_audio_mix_${{ inputs.project_id }}.mp3 \
+            --project-id  ${{ inputs.project_id }} \
+            --push
+
+      - name: Commit directives.json dans SANCTORUM
+        run: |
+          cp /tmp/directives.json "F03_SERAPHIM/OUT/directives_${{ inputs.project_id }}.json"
+          git config user.name  "ANGRON-SERAPHIM"
+          git config user.email "seraphim@angron.bot"
+          git add F03_SERAPHIM/OUT/
+          git diff --cached --quiet || git commit -m "[SERAPHIM] directives + mix ${{ inputs.project_id }} OK"
+          git push

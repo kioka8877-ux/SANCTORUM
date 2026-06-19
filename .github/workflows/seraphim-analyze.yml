@@ -1,0 +1,56 @@
+name: SANCTORUM - F03A SERAPHIM Analyze
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: "ID projet (ex: 004)"
+        required: true
+        default: "004"
+      music_file:
+        description: "Nom du fichier musique dans F03_SERAPHIM/IN/ (ex: music_004.mp3)"
+        required: true
+
+jobs:
+  seraphim-analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout SANCTORUM
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Install Python deps
+        run: |
+          pip install --quiet \
+            librosa==0.10.2 \
+            soundfile \
+            numpy \
+            scipy \
+            matplotlib
+
+      - name: Run BPM analysis + generate viewer
+        run: |
+          MUSIC="F03_SERAPHIM/IN/${{ inputs.music_file }}"
+          if [ ! -f "$MUSIC" ]; then
+            echo "ERREUR: $MUSIC introuvable dans le repo"
+            ls F03_SERAPHIM/IN/ || true
+            exit 1
+          fi
+          mkdir -p F03_SERAPHIM/OUT
+          python3 F03_SERAPHIM/CODEBASE/seraphim_a.py \
+            --phase   analyze \
+            --music   "$MUSIC" \
+            --output-json  "F03_SERAPHIM/OUT/analysis_${{ inputs.project_id }}.json" \
+            --output-html  "F03_SERAPHIM/OUT/viewer_${{ inputs.project_id }}.html"
+
+      - name: Commit viewer + analysis
+        run: |
+          git config user.name  "ANGRON-SERAPHIM"
+          git config user.email "seraphim@angron.bot"
+          git add F03_SERAPHIM/OUT/
+          git diff --cached --quiet || git commit -m "[SERAPHIM] Viewer BPM ${{ inputs.project_id }} genere"
+          git push
