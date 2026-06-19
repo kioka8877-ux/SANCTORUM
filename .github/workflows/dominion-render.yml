@@ -37,15 +37,21 @@ jobs:
         with:
           path: /tmp/omnivoice_model
           key: omnivoice-model-v1
-      - name: Download OmniVoice model
-        if: steps.model-cache.outputs.cache-hit != 'true'
+      - name: Download OmniVoice + Whisper ref_voice (1x)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: python F01_DOMINION/CODEBASE/model_prep.py
-      - name: Package model
-        run: tar -czf /tmp/omnivoice_model.tar.gz -C /tmp omnivoice_model
+      - name: Package model + ref files
+        run: |
+          tar -czf /tmp/omnivoice_model.tar.gz -C /tmp omnivoice_model
+          ls -lh /tmp/ref_text.txt /tmp/ref_voice_trim.wav 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
           name: omnivoice-model
-          path: /tmp/omnivoice_model.tar.gz
+          path: |
+            /tmp/omnivoice_model.tar.gz
+            /tmp/ref_text.txt
+            /tmp/ref_voice_trim.wav
           retention-days: 1
 
   render:
@@ -66,13 +72,14 @@ jobs:
         with:
           name: omnivoice-model
           path: /tmp
-      - name: Extract model
-        run: tar -xzf /tmp/omnivoice_model.tar.gz -C /tmp
+      - name: Extract model + ref files
+        run: |
+          tar -xzf /tmp/omnivoice_model.tar.gz -C /tmp
+          ls /tmp/ref_text.txt /tmp/ref_voice_trim.wav 2>/dev/null && echo "[OK] ref files ready" || echo "[WARN] ref files missing — auto_voice"
       - name: Generer chunk
         env:
           CHUNK_ID: ${{ matrix.chunk_id }}
           PROJECT_ID: ${{ github.event.inputs.project_id }}
-          GH_PAT: ${{ secrets.GH_PAT }}
           HF_HUB_DISABLE_PROGRESS_BARS: "1"
           OMNIVOICE_MODEL_PATH: "/tmp/omnivoice_model"
         run: python F01_DOMINION/CODEBASE/dominion_worker.py
