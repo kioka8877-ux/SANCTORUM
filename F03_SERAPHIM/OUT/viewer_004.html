@@ -614,6 +614,44 @@ function getCrossfades() {
   };
 }
 
+// Equal-power curve: fadeIn=true → sin(0→π/2), fadeIn=false → cos(0→π/2)
+function powerCurve(n, fadeIn) {
+  const c = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    c[i] = fadeIn ? Math.sin(t * Math.PI / 2) : Math.cos(t * Math.PI / 2);
+  }
+  return c;
+}
+
+// Schedule a buffer source with optional equal-power fade-in and/or fade-out.
+// fireAt, segStart, segDur in AudioContext seconds; cfIn/cfOut in seconds.
+function schedSource(ctx, buf, rate, fireAt, segStart, segDur, cfIn, cfOut) {
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = rate;
+  const gain = ctx.createGain();
+  src.connect(gain);
+  gain.connect(ctx.destination);
+
+  if (cfIn > 0) {
+    gain.gain.setValueAtTime(0, fireAt);
+    gain.gain.setValueCurveAtTime(powerCurve(128, true), fireAt, cfIn);
+  } else {
+    gain.gain.setValueAtTime(1, fireAt);
+  }
+
+  if (cfOut > 0) {
+    const fadeStart = fireAt + segDur / rate - cfOut;
+    // only set if fade starts after any fade-in ends
+    gain.gain.setValueAtTime(1, Math.max(fireAt + (cfIn || 0), fadeStart));
+    gain.gain.setValueCurveAtTime(powerCurve(128, false), Math.max(fireAt + (cfIn || 0), fadeStart), cfOut);
+  }
+
+  src.start(fireAt, segStart, segDur + (cfOut > 0 ? cfOut * rate * 0.05 : 0));
+  return src;
+}
+
 // ─── PREVIEW SEGMENT ──────────────────────────────────────────────────────────
 async function previewSeg(key) {
   if (!audioBuffer) return;
@@ -635,20 +673,30 @@ async function previewCrossfade(key) {
   const segs = getSegments();
   const cf = getCrossfades();
 
-  let segA, segB, cfMs;
-  if (key === 'ql') { segA = segs.queue; segB = segs.loop; cfMs = cf.queue_to_loop; }
-  else              { segA = segs.loop;  segB = segs.tete; cfMs = cf.loop_to_tete; }
+  let segA, segB, cfSec;
+  if (key === 'ql') { segA = segs.queue; segB = segs.loop; cfSec = cf.queue_to_loop / 1000; }
+  else              { segA = segs.loop;  segB = segs.tete; cfSec = cf.loop_to_tete / 1000; }
 
-  // Play last 2s of A, then cross into first 2s of B
-  const tA = Math.max(segA.start, segA.end - 2);
-  seek(tA);
-  playAudio(tA);
-  const durA = segA.end - tA;
-  setTimeout(() => {
-    seek(segB.start);
-    if (isPlaying) playAudio(segB.start);
-    setTimeout(pauseAudio, 2000 / playbackRate);
-  }, (durA / playbackRate) * 1000);
+  const ctx = getCtx();
+  const previewA = Math.min(2.5, segA.end - segA.start); // last N seconds of A
+  const previewB = Math.min(2.5, segB.end - segB.start); // first N seconds of B
+  const startA = segA.end - previewA;
+  const now = ctx.currentTime + 0.05;
+
+  // Source A — fade out with equal-power during the last cfSec
+  const srcA = schedSource(ctx, audioBuffer, playbackRate, now, startA, previewA, 0, cfSec);
+  finalSeqNodes.push(srcA);
+
+  // Source B — starts cfSec before A ends, fades in with equal-power
+  const bFireAt = now + (previewA - cfSec) / playbackRate;
+  const srcB = schedSource(ctx, audioBuffer, playbackRate, bFireAt, segB.start, previewB, cfSec, 0);
+  finalSeqNodes.push(srcB);
+
+  finalPlaying = true;
+  document.getElementById('final-status').textContent = `TEST ${key === 'ql' ? 'QUEUE→LOOP' : 'LOOP→TÊTE'} (${Math.round(cfSec*1000)}ms)`;
+
+  const totalMs = ((previewA + previewB - cfSec) / playbackRate) * 1000;
+  setTimeout(stopAll, totalMs + 300);
 }
 
 // ─── FINAL SEQUENCE ────────────────────────────────────────────────────────────
@@ -666,73 +714,65 @@ async function playFinalSequence() {
 
   const segs = getSegments();
   const cf = getCrossfades();
+  const ctx = getCtx();
 
-  // Build sequence: [QUEUE ×n] [LOOP ×n] [TÊTE ×n]
+  // Build sequence with crossfade durations between items
   const sequence = [];
   for (let i = 0; i < segs.queue.loops; i++) sequence.push({ seg: segs.queue, label: `QUEUE ${i+1}/${segs.queue.loops}` });
   for (let i = 0; i < segs.loop.loops;  i++) sequence.push({ seg: segs.loop,  label: `LOOP ${i+1}/${segs.loop.loops}` });
   for (let i = 0; i < segs.tete.loops;  i++) sequence.push({ seg: segs.tete,  label: `TÊTE ${i+1}/${segs.tete.loops}` });
 
-  // Total duration
-  finalDuration = sequence.reduce((s, item) => s + (item.seg.end - item.seg.start), 0);
-  const ctx = getCtx();
+  // Determine crossfade at each boundary (in seconds)
+  function cfBetween(i) {
+    if (i < 0 || i >= sequence.length - 1) return 0;
+    const qLen = segs.queue.loops;
+    const qLLen = qLen + segs.loop.loops;
+    if (i === qLen - 1) return cf.queue_to_loop / 1000;   // last QUEUE → first LOOP
+    if (i === qLLen - 1) return cf.loop_to_tete / 1000;   // last LOOP  → first TÊTE
+    return 0; // within same group: hard cut (or small default)
+  }
+
+  // Schedule all sources with correct overlaps
+  // wallAt = wall-clock seconds from now for each source to start
+  let wallAt = 0.05;
+  finalDuration = 0;
   finalStartedAt = ctx.currentTime;
 
-  // Schedule all sources
-  let schedAt = 0;
   for (let i = 0; i < sequence.length; i++) {
     const item = sequence[i];
     const segDur = item.seg.end - item.seg.start;
-    const src = ctx.createBufferSource();
-    src.buffer = audioBuffer;
-    src.playbackRate.value = playbackRate;
+    const cfIn  = cfBetween(i - 1); // crossfade coming in  (from previous)
+    const cfOut = cfBetween(i);     // crossfade going out  (to next)
 
-    // Gain node for crossfade
-    const gain = ctx.createGain();
-    gain.gain.value = 1;
-    src.connect(gain);
-    gain.connect(ctx.destination);
-
-    const fireAt = ctx.currentTime + schedAt / playbackRate;
-    src.start(fireAt, item.seg.start, segDur);
-
-    // Fade in from crossfade if applicable
-    let cfIn = 0;
-    if (i > 0) {
-      const prevKey = i === segs.queue.loops ? 'ql' : 'lt';
-      cfIn = (prevKey === 'ql' ? cf.queue_to_loop : cf.loop_to_tete) / 1000;
-      gain.gain.setValueAtTime(0, fireAt);
-      gain.gain.linearRampToValueAtTime(1, fireAt + cfIn);
-    }
-    // Fade out for crossfade if applicable
-    const hasNext = i < sequence.length - 1;
-    if (hasNext) {
-      const nextKey = (i < segs.queue.loops - 1) ? null : (i < segs.queue.loops + segs.loop.loops - 1 ? 'ql' : 'lt');
-      const cfOut = nextKey === 'ql' ? cf.queue_to_loop / 1000 : nextKey === 'lt' ? cf.loop_to_tete / 1000 : 0;
-      if (cfOut > 0) {
-        const fadeStart = fireAt + (segDur - cfOut) / playbackRate;
-        gain.gain.setValueAtTime(1, fadeStart);
-        gain.gain.linearRampToValueAtTime(0, fadeStart + cfOut / playbackRate);
-      }
-    }
-
+    const fireAt = ctx.currentTime + wallAt;
+    const src = schedSource(ctx, audioBuffer, playbackRate, fireAt, item.seg.start, segDur, cfIn, cfOut);
     finalSeqNodes.push(src);
-    schedAt += segDur;
-  }
 
-  // Status updates
-  let elapsed = 0;
+    // Wall-clock duration this segment occupies before next starts
+    // = segDur / rate  −  overlap_with_next (cfOut)
+    const wallDur = segDur / playbackRate - cfOut;
+    wallAt += wallDur;
+    finalDuration += wallDur;
+  }
+  // Add back last segment's tail (no overlap after it)
+  finalDuration += (sequence[sequence.length - 1].seg.end - sequence[sequence.length - 1].seg.start) / playbackRate
+                  - (sequence[sequence.length - 1].seg.end - sequence[sequence.length - 1].seg.start) / playbackRate;
+  // Recompute clean total
+  finalDuration = wallAt - 0.05;
+
+  // Status label updates
+  let dispAt = 0;
   for (let i = 0; i < sequence.length; i++) {
     const item = sequence[i];
     const segDur = item.seg.end - item.seg.start;
+    const cfOut = cfBetween(i);
     ((lbl, delay) => setTimeout(() => {
       if (finalPlaying) document.getElementById('final-status').textContent = `▶ ${lbl}`;
-    }, delay * 1000 / playbackRate))(item.label, elapsed);
-    elapsed += segDur;
+    }, delay * 1000))(item.label, dispAt);
+    dispAt += segDur / playbackRate - cfOut;
   }
 
-  // Stop when done
-  setTimeout(stopAll, (finalDuration / playbackRate) * 1000 + 200);
+  setTimeout(stopAll, finalDuration * 1000 + 300);
 }
 
 function updateFinalProgress() {
