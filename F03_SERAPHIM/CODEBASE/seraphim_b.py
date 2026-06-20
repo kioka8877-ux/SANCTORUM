@@ -97,11 +97,19 @@ def assemble_mix(directives_path, music_path, voice_path, output_path):
     size_kb = os.path.getsize(output_path) // 1024
     dur_s   = len(master) / 1000
     print(f"[SERAPHIM-B] master_audio_mix -> {output_path} ({size_kb} KB, {dur_s:.1f}s)")
-    return dur_s
+
+    # Export backbone seul (musique sans voix) — pour reutilisation dans d'autres projets
+    backbone_path = output_path.replace('.mp3', '_backbone.mp3')
+    music_backbone_full = music_backbone[:target_ms].normalize(headroom=1.0)
+    music_backbone_full.export(backbone_path, format='mp3', bitrate='192k')
+    size_kb2 = os.path.getsize(backbone_path) // 1024
+    print(f"[SERAPHIM-B] music_backbone   -> {backbone_path} ({size_kb2} KB, {dur_s:.1f}s)")
+
+    return dur_s, backbone_path
 
 
-def push_to_angron(local_path, project_id, gh_token, repo="kioka8877-ux/ANGRON-V2"):
-    filename  = f"master_audio_mix_{project_id}.mp3"
+def push_to_angron(local_path, project_id, gh_token, repo="kioka8877-ux/ANGRON-V2", dest_filename=None):
+    filename  = dest_filename or f"master_audio_mix_{project_id}.mp3"
     dest_path = f"F02_LACERAT/IN/{filename}"
     api_url   = f"https://api.github.com/repos/{repo}/contents/{dest_path}"
 
@@ -124,7 +132,7 @@ def push_to_angron(local_path, project_id, gh_token, repo="kioka8877-ux/ANGRON-V
         pass
 
     payload = {
-        "message": f"[SERAPHIM] master_audio_mix_{project_id}.mp3",
+        "message": f"[SERAPHIM] {filename}",
         "content": content_b64,
         "branch":  "main"
     }
@@ -153,15 +161,20 @@ def main():
     p.add_argument('--push',        action='store_true')
     args = p.parse_args()
 
-    assemble_mix(args.directives, args.music, args.voice, args.output)
+    _, backbone_path = assemble_mix(args.directives, args.music, args.voice, args.output)
 
     if args.push:
         gh_token = os.environ.get('GH_PAT')
         if not gh_token:
             print("[SERAPHIM-B] ERREUR: GH_PAT manquant", file=sys.stderr)
             sys.exit(1)
+        # Pousse le mix final (voix + musique)
         push_to_angron(args.output, args.project_id, gh_token)
+        # Pousse le backbone seul (musique pure, sans voix)
+        push_to_angron(backbone_path, args.project_id, gh_token,
+                       dest_filename=f"music_backbone_{args.project_id}.mp3")
 
 
 if __name__ == '__main__':
     main()
+
