@@ -624,8 +624,8 @@ function powerCurve(n, fadeIn) {
   return c;
 }
 
-// Schedule a buffer source with optional equal-power fade-in and/or fade-out.
-// fireAt, segStart, segDur in AudioContext seconds; cfIn/cfOut in seconds.
+// Schedule a buffer source with linear fade-in and/or fade-out.
+// fireAt: AudioContext wall-clock time. segDur: source seconds. cfIn/cfOut: wall-clock seconds.
 function schedSource(ctx, buf, rate, fireAt, segStart, segDur, cfIn, cfOut) {
   const src = ctx.createBufferSource();
   src.buffer = buf;
@@ -634,21 +634,24 @@ function schedSource(ctx, buf, rate, fireAt, segStart, segDur, cfIn, cfOut) {
   src.connect(gain);
   gain.connect(ctx.destination);
 
+  const wallDur = segDur / rate; // wall-clock duration of this source
+
+  // Initial gain
+  gain.gain.setValueAtTime(cfIn > 0 ? 0 : 1, fireAt);
+
+  // Fade in (linear ramp — no setValueCurveAtTime conflicts)
   if (cfIn > 0) {
-    gain.gain.setValueAtTime(0, fireAt);
-    gain.gain.setValueCurveAtTime(powerCurve(128, true), fireAt, cfIn);
-  } else {
-    gain.gain.setValueAtTime(1, fireAt);
+    gain.gain.linearRampToValueAtTime(1, fireAt + cfIn);
   }
 
+  // Fade out — starts so that it ends exactly when the source ends
   if (cfOut > 0) {
-    const fadeStart = fireAt + segDur / rate - cfOut;
-    // only set if fade starts after any fade-in ends
-    gain.gain.setValueAtTime(1, Math.max(fireAt + (cfIn || 0), fadeStart));
-    gain.gain.setValueCurveAtTime(powerCurve(128, false), Math.max(fireAt + (cfIn || 0), fadeStart), cfOut);
+    const fadeOutStart = Math.max(fireAt + cfIn, fireAt + wallDur - cfOut);
+    gain.gain.setValueAtTime(1, fadeOutStart);
+    gain.gain.linearRampToValueAtTime(0, fireAt + wallDur);
   }
 
-  src.start(fireAt, segStart, segDur + (cfOut > 0 ? cfOut * rate * 0.05 : 0));
+  src.start(fireAt, segStart, segDur);
   return src;
 }
 
@@ -678,25 +681,31 @@ async function previewCrossfade(key) {
   else              { segA = segs.loop;  segB = segs.tete; cfSec = cf.loop_to_tete / 1000; }
 
   const ctx = getCtx();
-  const previewA = Math.min(2.5, segA.end - segA.start); // last N seconds of A
-  const previewB = Math.min(2.5, segB.end - segB.start); // first N seconds of B
+  const previewA = Math.min(2.5, segA.end - segA.start); // source seconds
+  const previewB = Math.min(2.5, segB.end - segB.start); // source seconds
   const startA = segA.end - previewA;
   const now = ctx.currentTime + 0.05;
 
-  // Source A — fade out with equal-power during the last cfSec
+  // Wall-clock durations
+  const wallA = previewA / playbackRate;
+  const wallB = previewB / playbackRate;
+
+  // Source A: fades out over cfSec wall-clock seconds at the end
   const srcA = schedSource(ctx, audioBuffer, playbackRate, now, startA, previewA, 0, cfSec);
   finalSeqNodes.push(srcA);
 
-  // Source B — starts cfSec before A ends, fades in with equal-power
-  const bFireAt = now + (previewA - cfSec) / playbackRate;
+  // Source B: fires cfSec before A ends (real overlap), fades in over cfSec
+  const bFireAt = now + wallA - cfSec;
   const srcB = schedSource(ctx, audioBuffer, playbackRate, bFireAt, segB.start, previewB, cfSec, 0);
   finalSeqNodes.push(srcB);
 
   finalPlaying = true;
-  document.getElementById('final-status').textContent = `TEST ${key === 'ql' ? 'QUEUE→LOOP' : 'LOOP→TÊTE'} (${Math.round(cfSec*1000)}ms)`;
+  finalDuration = wallA + wallB - cfSec;
+  finalStartedAt = now;
+  document.getElementById('final-play-btn').textContent = '■ STOP';
+  document.getElementById('final-status').textContent = `▶ TEST ${key === 'ql' ? 'QUEUE→LOOP' : 'LOOP→TÊTE'} (${Math.round(cfSec * 1000)}ms)`;
 
-  const totalMs = ((previewA + previewB - cfSec) / playbackRate) * 1000;
-  setTimeout(stopAll, totalMs + 300);
+  setTimeout(stopAll, finalDuration * 1000 + 400);
 }
 
 // ─── FINAL SEQUENCE ────────────────────────────────────────────────────────────
@@ -732,47 +741,37 @@ async function playFinalSequence() {
     return 0; // within same group: hard cut (or small default)
   }
 
-  // Schedule all sources with correct overlaps
-  // wallAt = wall-clock seconds from now for each source to start
-  let wallAt = 0.05;
-  finalDuration = 0;
-  finalStartedAt = ctx.currentTime;
+  // Schedule sources with overlap at crossfade boundaries
+  const T0 = ctx.currentTime + 0.1; // first source fires here
+  finalStartedAt = T0;
+  let wallAt = 0; // seconds from T0
 
   for (let i = 0; i < sequence.length; i++) {
     const item = sequence[i];
-    const segDur = item.seg.end - item.seg.start;
-    const cfIn  = cfBetween(i - 1); // crossfade coming in  (from previous)
-    const cfOut = cfBetween(i);     // crossfade going out  (to next)
+    const segDur = item.seg.end - item.seg.start;  // source seconds
+    const wallDur = segDur / playbackRate;           // wall-clock seconds this clip lasts
+    const cfIn  = cfBetween(i - 1);
+    const cfOut = cfBetween(i);
 
-    const fireAt = ctx.currentTime + wallAt;
-    const src = schedSource(ctx, audioBuffer, playbackRate, fireAt, item.seg.start, segDur, cfIn, cfOut);
+    const src = schedSource(ctx, audioBuffer, playbackRate, T0 + wallAt, item.seg.start, segDur, cfIn, cfOut);
     finalSeqNodes.push(src);
 
-    // Wall-clock duration this segment occupies before next starts
-    // = segDur / rate  −  overlap_with_next (cfOut)
-    const wallDur = segDur / playbackRate - cfOut;
-    wallAt += wallDur;
-    finalDuration += wallDur;
-  }
-  // Add back last segment's tail (no overlap after it)
-  finalDuration += (sequence[sequence.length - 1].seg.end - sequence[sequence.length - 1].seg.start) / playbackRate
-                  - (sequence[sequence.length - 1].seg.end - sequence[sequence.length - 1].seg.start) / playbackRate;
-  // Recompute clean total
-  finalDuration = wallAt - 0.05;
-
-  // Status label updates
-  let dispAt = 0;
-  for (let i = 0; i < sequence.length; i++) {
-    const item = sequence[i];
-    const segDur = item.seg.end - item.seg.start;
-    const cfOut = cfBetween(i);
-    ((lbl, delay) => setTimeout(() => {
+    // Status label fires at start of this source
+    ((lbl, t) => setTimeout(() => {
       if (finalPlaying) document.getElementById('final-status').textContent = `▶ ${lbl}`;
-    }, delay * 1000))(item.label, dispAt);
-    dispAt += segDur / playbackRate - cfOut;
+    }, t * 1000))(item.label, wallAt);
+
+    // Next source starts cfOut before this one ends (overlap = crossfade)
+    wallAt += wallDur - cfOut;
   }
 
-  setTimeout(stopAll, finalDuration * 1000 + 300);
+  // Total duration: end of last clip
+  const last = sequence[sequence.length - 1];
+  finalDuration = wallAt + (last.seg.end - last.seg.start) / playbackRate;
+  // Correct: wallAt already moved past last advance, add back the cfOut that was subtracted
+  finalDuration = wallAt + cfBetween(sequence.length - 1);
+
+  setTimeout(stopAll, finalDuration * 1000 + 400);
 }
 
 function updateFinalProgress() {
