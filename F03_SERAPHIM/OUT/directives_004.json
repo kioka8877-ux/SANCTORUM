@@ -1,0 +1,70 @@
+{
+  "project_id": "004",
+  "bpm": 120,
+  "audio_timeline": [
+    {
+      "start": 0.0,
+      "end": 5.81,
+      "loops": 2,
+      "volume_pct": 75,
+      "fade_in_ms": 200,
+      "fade_out_ms": 0,
+      "speed": 1.0,
+      "reverse": false
+    },
+    {
+      "start": 32.22,
+      "end": 45.0,
+      "loops": 3,
+      "volume_pct": 55,
+      "fade_in_ms": 0,
+      "fade_out_ms": 0,
+      "speed": 1.0,
+      "reverse": false
+    },
+    {
+      "start": 163.15,
+      "end": 173.82,
+      "loops": 1,
+      "volume_pct": 85,
+      "fade_in_ms": 0,
+      "fade_out_ms": 800,
+      "speed": 1.0,
+      "reverse": false
+    }
+  ],
+  "ducking_db": -14,
+  "crossfade_ms": 500,
+  "energy_map": [
+    {
+      "section": "hook",
+      "start": 0.0,
+      "end": 5.08,
+      "energy": "high"
+    },
+    {
+      "section": "equation",
+      "start": 5.93,
+      "end": 27.5,
+      "energy": "low"
+    },
+    {
+      "section": "comparaison",
+      "start": 27.92,
+      "end": 42.94,
+      "energy": "medium"
+    },
+    {
+      "section": "chute",
+      "start": 44.12,
+      "end": 56.94,
+      "energy": "high"
+    },
+    {
+      "section": "CTA",
+      "start": 56.94,
+      "end": 68.32,
+      "energy": "medium"
+    }
+  ]
+}
