@@ -17,7 +17,7 @@ def analyze_bpm(music_path, output_json, output_html):
     duration = librosa.get_duration(y=y, sr=sr)
     tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
     beat_times = librosa.frames_to_time(beats, sr=sr).tolist()
-    bpm = float(f"{tempo:.2f}")
+    bpm = round(float(np.asarray(tempo).flat[0]), 2)
 
     fig, ax = plt.subplots(figsize=(16, 4), facecolor='#0d0d1a')
     times = np.linspace(0, duration, len(y))
