@@ -54,7 +54,7 @@ else:
     print("[MODE] auto_voice")
 
 t1 = time.time()
-r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
 elapsed = time.time() - t1
 
 if r.returncode != 0:
