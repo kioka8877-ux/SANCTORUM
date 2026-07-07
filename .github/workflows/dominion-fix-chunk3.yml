@@ -1,0 +1,181 @@
+name: dominion-fix-chunk3
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  split-chunk3:
+    runs-on: ubuntu-latest
+    container: ghcr.io/kioka8877-ux/dominion:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Split script and extract chunk 3 halves
+        env:
+          N_WORKERS: "10"
+          CUSTOM_SCRIPT_PATH: "F01_DOMINION/IN/custom_script.md"
+        run: |
+          python F01_DOMINION/CODEBASE/dominion_split_custom.py
+          python3 -c "
+          import json, re
+          with open('/tmp/chunks.json') as f:
+              chunks = json.load(f)
+          text = chunks['3']
+          sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+          mid = len(sentences) // 2
+          half_a = ' '.join(sentences[:mid])
+          half_b = ' '.join(sentences[mid:])
+          with open('/tmp/chunks3.json', 'w') as f:
+              json.dump({'a': half_a, 'b': half_b}, f, ensure_ascii=False, indent=2)
+          print(f'3a: {len(half_a)} chars')
+          print(f'3b: {len(half_b)} chars')
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunks3-json
+          path: /tmp/chunks3.json
+
+  model-prep:
+    runs-on: ubuntu-latest
+    container: ghcr.io/kioka8877-ux/dominion:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache OmniVoice model
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/omnivoice_model
+          key: omnivoice-model-v1
+      - name: Download OmniVoice + Whisper ref_voice
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: python F01_DOMINION/CODEBASE/model_prep.py
+      - name: Package model + ref files
+        run: |
+          tar -czf /tmp/omnivoice_model.tar.gz -C /tmp omnivoice_model
+          ls -lh /tmp/ref_text.txt /tmp/ref_voice_trim.wav 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omnivoice-model
+          path: |
+            /tmp/omnivoice_model.tar.gz
+            /tmp/ref_text.txt
+            /tmp/ref_voice_trim.wav
+          retention-days: 1
+
+  render-half:
+    needs: [split-chunk3, model-prep]
+    runs-on: ubuntu-latest
+    container: ghcr.io/kioka8877-ux/dominion:latest
+    strategy:
+      matrix:
+        half: [a, b]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: chunks3-json
+          path: /tmp
+      - uses: actions/download-artifact@v4
+        with:
+          name: omnivoice-model
+          path: /tmp
+      - name: Extract model + ref files
+        run: |
+          tar -xzf /tmp/omnivoice_model.tar.gz -C /tmp
+          ls /tmp/ref_text.txt /tmp/ref_voice_trim.wav 2>/dev/null && echo "[OK] ref files ready" || echo "[WARN] ref files missing"
+      - name: Render half
+        env:
+          CHUNK_HALF: ${{ matrix.half }}
+          TTS_LANGUAGE: "en"
+          OMNIVOICE_MODEL_PATH: "/tmp/omnivoice_model"
+        run: |
+          python3 -c "
+          import os, json, sys, time, subprocess
+          half = os.environ['CHUNK_HALF']
+          MODEL_PATH = os.environ.get('OMNIVOICE_MODEL_PATH', '/tmp/omnivoice_model')
+          output_path = f'/tmp/chunk_3{half}.wav'
+          with open('/tmp/chunks3.json', encoding='utf-8') as f:
+              chunks = json.load(f)
+          text = chunks.get(half, '').strip()
+          if not text:
+              print(f'Empty half {half}')
+              sys.exit(1)
+          print(f'[WORKER 3{half}] {len(text)} chars: {text[:80]}...')
+          ref_text = ''
+          ref_audio = '/tmp/ref_voice_trim.wav'
+          if os.path.exists('/tmp/ref_text.txt'):
+              with open('/tmp/ref_text.txt', encoding='utf-8') as f:
+                  ref_text = f.read().strip()
+          if not os.path.exists(ref_audio) or os.path.getsize(ref_audio) == 0:
+              ref_audio = ''
+          cmd = ['omnivoice-infer', '--model', MODEL_PATH, '--text', text, '--language', 'en', '--output', output_path]
+          if ref_audio:
+              cmd += ['--ref_audio', ref_audio]
+              if ref_text:
+                  cmd += ['--ref_text', ref_text]
+          t1 = time.time()
+          r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+          elapsed = time.time() - t1
+          if r.returncode != 0:
+              print(f'[FAILED] code={r.returncode}')
+              print(r.stderr[-3000:])
+              sys.exit(1)
+          sz = os.path.getsize(output_path)
+          print(f'[OK] chunk_3{half}.wav - {sz/1024:.0f} KB - {elapsed:.1f}s')
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunk3-${{ matrix.half }}
+          path: /tmp/chunk_3${{ matrix.half }}.wav
+
+  merge-and-concat:
+    needs: render-half
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: chunk3-a
+          path: /tmp
+      - uses: actions/download-artifact@v4
+        with:
+          name: chunk3-b
+          path: /tmp
+      - name: Download other 9 chunks from previous run
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          for i in 0 1 2 4 5 6 7 8 9; do
+            echo "Downloading chunk-$i from run 28894814304..."
+            gh run download 28894814304 -R kioka8877-ux/SANCTORUM -n chunk-$i -D /tmp/chunk_dl_$i
+            cp /tmp/chunk_dl_$i/chunk_$i.wav /tmp/chunk_$i.wav
+          done
+          echo "--- All chunks ---"
+          ls -lh /tmp/chunk_*.wav
+      - name: Merge 3a + 3b into chunk_3.wav
+        run: |
+          pip install pydub -q
+          python3 -c "
+          from pydub import AudioSegment
+          a = AudioSegment.from_wav('/tmp/chunk_3a.wav')
+          b = AudioSegment.from_wav('/tmp/chunk_3b.wav')
+          combined = a + b
+          combined.export('/tmp/chunk_3.wav', format='wav')
+          print(f'Merged chunk_3: {len(combined)/1000:.1f}s')
+          "
+      - name: Concat all 10 chunks into final MP3
+        run: |
+          pip install pydub -q
+          python3 F01_DOMINION/CODEBASE/dominion_concat_custom.py
+        env:
+          PROJECT_ID: "custom"
+          N_WORKERS: "10"
+      - name: Upload final MP3
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-custom-mp3
+          path: /tmp/voice_custom.mp3
+          retention-days: 7
