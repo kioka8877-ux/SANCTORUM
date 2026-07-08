@@ -1,0 +1,76 @@
+name: dominion-concat-only
+
+on:
+  workflow_dispatch:
+    inputs:
+      chunk3_run_id:
+        description: "Run ID du fix-chunk3 (pour chunk 3a+3b)"
+        required: true
+        default: "28900734080"
+      prev_run_id:
+        description: "Run ID du render original (pour chunks 0-2,4-9)"
+        required: true
+        default: "28894814304"
+
+jobs:
+  concat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install pydub
+        run: pip install pydub -q
+      - name: Download chunk 3a + 3b from fix run
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh run download ${{ github.event.inputs.chunk3_run_id }} -R kioka8877-ux/SANCTORUM -n chunk3-a -D /tmp/dl3a
+          gh run download ${{ github.event.inputs.chunk3_run_id }} -R kioka8877-ux/SANCTORUM -n chunk3-b -D /tmp/dl3b
+          cp /tmp/dl3a/chunk_3a.wav /tmp/chunk_3a.wav
+          cp /tmp/dl3b/chunk_3b.wav /tmp/chunk_3b.wav
+          echo "chunk 3a+3b downloaded"
+      - name: Download chunks 0-2,4-9 from original run
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          for i in 0 1 2 4 5 6 7 8 9; do
+            gh run download ${{ github.event.inputs.prev_run_id }} -R kioka8877-ux/SANCTORUM -n chunk-$i -D /tmp/dl_$i
+            cp /tmp/dl_$i/chunk_$i.wav /tmp/chunk_$i.wav
+          done
+          echo "chunks 0-2,4-9 downloaded"
+      - name: Merge 3a + 3b
+        run: |
+          python3 -c "
+          from pydub import AudioSegment
+          a = AudioSegment.from_wav('/tmp/chunk_3a.wav')
+          b = AudioSegment.from_wav('/tmp/chunk_3b.wav')
+          (a + b).export('/tmp/chunk_3.wav', format='wav')
+          print(f'Merged chunk_3: {len(a+b)/1000:.1f}s')
+          "
+      - name: Concat all 10 chunks
+        run: |
+          python3 -c "
+          import os
+          from pydub import AudioSegment
+          combined = AudioSegment.empty()
+          for i in range(10):
+              p = f'/tmp/chunk_{i}.wav'
+              if os.path.exists(p) and os.path.getsize(p) > 0:
+                  seg = AudioSegment.from_wav(p)
+                  combined += seg
+                  print(f'  [+] chunk_{i}: {len(seg)/1000:.1f}s')
+              else:
+                  print(f'  [!] chunk_{i}: MISSING')
+          dur = len(combined) / 1000
+          combined.export('/tmp/voice_custom.mp3', format='mp3', bitrate='192k')
+          sz = os.path.getsize('/tmp/voice_custom.mp3')
+          print(f'\n[CONCAT] {dur:.1f}s total — {sz/1024:.0f} KB')
+          print('[DOMINION] COMPLETE ✅')
+          "
+      - name: Upload final MP3
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-custom-mp3
+          path: /tmp/voice_custom.mp3
+          retention-days: 7
