@@ -1,0 +1,161 @@
+name: dominion-stormist-render
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  model-prep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: pip install openai-whisper torch torchaudio --quiet
+
+      - name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Install omnivoice
+        run: pip install omnivoice --quiet
+
+      - name: Download omnivoice model
+        run: |
+          python3 -c "
+          import omnivoice
+          omnivoice.download_model('/tmp/omnivoice_model')
+          "
+
+      - name: Convert + trim ref voice
+        run: |
+          ffmpeg -i SHARED/IN/ref_voice_v2.mp3 -ar 24000 -ac 1 /tmp/ref_voice_full.wav -y
+          ffmpeg -i /tmp/ref_voice_full.wav -t 20 /tmp/ref_voice_trim.wav -y
+
+      - name: Transcribe ref voice
+        run: |
+          python3 -c "
+          import whisper
+          model = whisper.load_model('base')
+          result = model.transcribe('/tmp/ref_voice_trim.wav', language='fr')
+          with open('/tmp/ref_text.txt', 'w') as f:
+              f.write(result['text'].strip())
+          print('ref_text:', result['text'].strip())
+          "
+
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: omnivoice-model
+          path: /tmp/omnivoice_model/
+          retention-days: 1
+
+      - name: Upload ref artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ref-assets
+          path: |
+            /tmp/ref_voice_trim.wav
+            /tmp/ref_text.txt
+          retention-days: 1
+
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Split script into 10 chunks
+        run: |
+          python3 F01_DOMINION/CODEBASE/dominion_split_custom.py \
+            --script F01_DOMINION/SCRIPTS/stormist_001.md \
+            --output /tmp/chunks.json \
+            --n 10
+
+      - name: Upload chunks artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chunks
+          path: /tmp/chunks.json
+          retention-days: 1
+
+  render:
+    needs: [model-prep, split]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        chunk_id: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          pip install omnivoice --quiet
+          sudo apt-get install -y ffmpeg
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: omnivoice-model
+          path: /tmp/omnivoice_model/
+
+      - name: Download ref assets
+        uses: actions/download-artifact@v4
+        with:
+          name: ref-assets
+          path: /tmp/
+
+      - name: Download chunks
+        uses: actions/download-artifact@v4
+        with:
+          name: chunks
+          path: /tmp/
+
+      - name: Generate chunk
+        env:
+          CHUNK_ID: ${{ matrix.chunk_id }}
+        run: |
+          python3 F01_DOMINION/CODEBASE/dominion_worker_custom.py \
+            --chunk_id $CHUNK_ID \
+            --chunks /tmp/chunks.json \
+            --model /tmp/omnivoice_model \
+            --ref_audio /tmp/ref_voice_trim.wav \
+            --ref_text_file /tmp/ref_text.txt \
+            --language en \
+            --output /tmp/chunk_${CHUNK_ID}.wav
+
+      - name: Upload chunk
+        uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.chunk_id }}
+          path: /tmp/chunk_${{ matrix.chunk_id }}.wav
+          retention-days: 1
+
+  concat:
+    needs: render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          pip install pydub --quiet
+          sudo apt-get install -y ffmpeg
+
+      - name: Download all chunks
+        uses: actions/download-artifact@v4
+        with:
+          pattern: chunk-*
+          path: /tmp/chunks/
+          merge-multiple: true
+
+      - name: Concatenate and export MP3
+        run: |
+          python3 F01_DOMINION/CODEBASE/dominion_concat_custom.py \
+            --chunks_dir /tmp/chunks \
+            --output /tmp/stormist_001.mp3
+
+      - name: Upload final MP3
+        uses: actions/upload-artifact@v4
+        with:
+          name: stormist-001-mp3
+          path: /tmp/stormist_001.mp3
+          retention-days: 7
