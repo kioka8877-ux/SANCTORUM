@@ -1,0 +1,197 @@
+name: dominion-stormist-fix5
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  render-5a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          pip install omnivoice --quiet
+          sudo apt-get install -y ffmpeg
+
+      - name: Download model from prev run
+        uses: actions/download-artifact@v4
+        with:
+          name: omnivoice-model
+          run-id: 29174400856
+          github-token: ${{ secrets.GH_PAT }}
+          path: /tmp/omnivoice_model/
+
+      - name: Download ref assets from prev run
+        uses: actions/download-artifact@v4
+        with:
+          name: ref-assets
+          run-id: 29174400856
+          github-token: ${{ secrets.GH_PAT }}
+          path: /tmp/
+
+      - name: Generate chunk 5a
+        run: |
+          python3 - <<'PYEOF'
+          import subprocess, sys, os
+
+          text = "The Labor Day hurricane of 1935, Hurricane Camille in 1969, Hurricane Andrew in 1992, and Hurricane Michael in 2018. Hurricane Irma in 2017 maintained Category 5 intensity with winds of 185 miles per hour for 37 consecutive hours, the longest any cyclone on Earth has ever sustained that wind speed."
+
+          ref_text = ""
+          if os.path.exists("/tmp/ref_text.txt"):
+              with open("/tmp/ref_text.txt") as f:
+                  ref_text = f.read().strip()
+
+          cmd = ["omnivoice-infer", "--model", "/tmp/omnivoice_model",
+                 "--text", text, "--language", "en", "--output", "/tmp/chunk_5a.wav"]
+          if os.path.exists("/tmp/ref_voice_trim.wav") and os.path.getsize("/tmp/ref_voice_trim.wav") > 0 and ref_text:
+              cmd += ["--ref_audio", "/tmp/ref_voice_trim.wav", "--ref_text", ref_text]
+              print("[MODE] voice_clone")
+          else:
+              print("[MODE] auto_voice")
+
+          r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+          print(r.stdout)
+          if r.returncode != 0:
+              print(r.stderr)
+              sys.exit(1)
+          print("[OK] chunk_5a.wav")
+          PYEOF
+
+      - name: Upload chunk 5a
+        uses: actions/upload-artifact@v4
+        with:
+          name: chunk-5a
+          path: /tmp/chunk_5a.wav
+          retention-days: 1
+
+  render-5b:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          pip install omnivoice --quiet
+          sudo apt-get install -y ffmpeg
+
+      - name: Download model from prev run
+        uses: actions/download-artifact@v4
+        with:
+          name: omnivoice-model
+          run-id: 29174400856
+          github-token: ${{ secrets.GH_PAT }}
+          path: /tmp/omnivoice_model/
+
+      - name: Download ref assets from prev run
+        uses: actions/download-artifact@v4
+        with:
+          name: ref-assets
+          run-id: 29174400856
+          github-token: ${{ secrets.GH_PAT }}
+          path: /tmp/
+
+      - name: Generate chunk 5b
+        run: |
+          python3 - <<'PYEOF'
+          import subprocess, sys, os
+
+          text = "A single hurricane releases the energy equivalent of roughly 10,000 nuclear bombs per day, most of it through the formation of rain. Super typhoon. A super typhoon is a typhoon with sustained winds of 150 miles per hour or greater, equivalent to a strong Category 4 or Category 5 hurricane."
+
+          ref_text = ""
+          if os.path.exists("/tmp/ref_text.txt"):
+              with open("/tmp/ref_text.txt") as f:
+                  ref_text = f.read().strip()
+
+          cmd = ["omnivoice-infer", "--model", "/tmp/omnivoice_model",
+                 "--text", text, "--language", "en", "--output", "/tmp/chunk_5b.wav"]
+          if os.path.exists("/tmp/ref_voice_trim.wav") and os.path.getsize("/tmp/ref_voice_trim.wav") > 0 and ref_text:
+              cmd += ["--ref_audio", "/tmp/ref_voice_trim.wav", "--ref_text", ref_text]
+              print("[MODE] voice_clone")
+          else:
+              print("[MODE] auto_voice")
+
+          r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+          print(r.stdout)
+          if r.returncode != 0:
+              print(r.stderr)
+              sys.exit(1)
+          print("[OK] chunk_5b.wav")
+          PYEOF
+
+      - name: Upload chunk 5b
+        uses: actions/upload-artifact@v4
+        with:
+          name: chunk-5b
+          path: /tmp/chunk_5b.wav
+          retention-days: 1
+
+  concat:
+    needs: [render-5a, render-5b]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          pip install pydub --quiet
+          sudo apt-get install -y ffmpeg
+
+      - name: Download chunks 0-4, 6-9 from prev run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: chunk-[0-9]
+          run-id: 29174400856
+          github-token: ${{ secrets.GH_PAT }}
+          path: /tmp/
+          merge-multiple: true
+
+      - name: Download chunk 5a
+        uses: actions/download-artifact@v4
+        with:
+          name: chunk-5a
+          path: /tmp/
+
+      - name: Download chunk 5b
+        uses: actions/download-artifact@v4
+        with:
+          name: chunk-5b
+          path: /tmp/
+
+      - name: Merge 5a + 5b into chunk_5.wav then concat all
+        run: |
+          python3 - <<'PYEOF'
+          from pydub import AudioSegment
+          import os
+
+          # Merge 5a + 5b -> chunk_5.wav
+          a = AudioSegment.from_wav("/tmp/chunk_5a.wav")
+          b = AudioSegment.from_wav("/tmp/chunk_5b.wav")
+          merged = a + b
+          merged.export("/tmp/chunk_5.wav", format="wav")
+          print(f"[MERGE] chunk_5.wav: {len(merged)/1000:.1f}s")
+
+          # Concat all 10 chunks in order
+          combined = AudioSegment.empty()
+          for i in range(10):
+              path = f"/tmp/chunk_{i}.wav"
+              if os.path.exists(path) and os.path.getsize(path) > 0:
+                  seg = AudioSegment.from_wav(path)
+                  print(f"  [+] chunk_{i}: {len(seg)/1000:.1f}s")
+                  combined += seg
+              else:
+                  print(f"  [!] chunk_{i}: MANQUANT")
+
+          total = len(combined)/1000
+          print(f"[CONCAT] {total:.1f}s total")
+          combined.export("/tmp/voice_stormist_001.mp3", format="mp3", bitrate="192k")
+          print("[DONE] voice_stormist_001.mp3")
+          PYEOF
+
+      - name: Upload final MP3
+        uses: actions/upload-artifact@v4
+        with:
+          name: stormist-001-mp3
+          path: /tmp/voice_stormist_001.mp3
+          retention-days: 7
