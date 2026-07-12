@@ -9,38 +9,73 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Install deps
-        run: pip install openai-whisper torch torchaudio --quiet
+        run: pip install openai-whisper torch torchaudio huggingface_hub --quiet
 
-      - name: Install ffmpeg
-        run: sudo apt-get install -y ffmpeg
+      - name: Install ffmpeg + git-lfs
+        run: sudo apt-get install -y ffmpeg git-lfs
 
       - name: Install omnivoice
         run: pip install omnivoice --quiet
 
-      - name: Download omnivoice model
+      - name: Download model + process ref voice
         run: |
-          python3 -c "
-          import omnivoice
-          omnivoice.download_model('/tmp/omnivoice_model')
-          "
+          python3 - <<'PYEOF'
+          import subprocess, sys, os, shutil
+          from huggingface_hub import snapshot_download
+          import time
 
-      - name: Convert + trim ref voice
-        run: |
-          ffmpeg -i SHARED/IN/ref_voice_v2.mp3 -ar 24000 -ac 1 /tmp/ref_voice_full.wav -y
-          ffmpeg -i /tmp/ref_voice_full.wav -t 20 /tmp/ref_voice_trim.wav -y
+          MODEL_DIR = "/tmp/omnivoice_model"
+          if os.path.exists(MODEL_DIR):
+              shutil.rmtree(MODEL_DIR)
 
-      - name: Transcribe ref voice
-        run: |
-          python3 -c "
-          import whisper
-          model = whisper.load_model('base')
-          result = model.transcribe('/tmp/ref_voice_trim.wav', language='fr')
-          with open('/tmp/ref_text.txt', 'w') as f:
-              f.write(result['text'].strip())
-          print('ref_text:', result['text'].strip())
-          "
+          print("[MODEL-PREP] Downloading k2-fsa/OmniVoice...")
+          for attempt in range(3):
+              try:
+                  snapshot_download(repo_id="k2-fsa/OmniVoice", local_dir=MODEL_DIR)
+                  print("[MODEL-PREP] OK")
+                  break
+              except Exception as e:
+                  print(f"Attempt {attempt+1} failed: {e}")
+                  time.sleep(30)
+          else:
+              sys.exit(1)
+
+          print(f"[MODEL-PREP] {len(os.listdir(MODEL_DIR))} files")
+
+          # Process ref voice from repo
+          raw_path = "SHARED/IN/ref_voice_v2.mp3"
+          ref_wav_trim = "/tmp/ref_voice_trim.wav"
+
+          try:
+              subprocess.run(
+                  ["ffmpeg", "-y", "-i", raw_path, "-ar", "24000", "-ac", "1", "/tmp/ref_voice.wav"],
+                  capture_output=True, check=True
+              )
+              subprocess.run(
+                  ["ffmpeg", "-y", "-i", "/tmp/ref_voice.wav", "-t", "20", "-ar", "24000", "-ac", "1", ref_wav_trim],
+                  capture_output=True, check=True
+              )
+              print("[REF] Trimmed to 20s OK")
+
+              import whisper
+              wmodel = whisper.load_model("base")
+              result_w = wmodel.transcribe(ref_wav_trim, language="fr")
+              ref_text = result_w["text"].strip()
+              print(f"[WHISPER] {ref_text[:120]}")
+          except Exception as e:
+              print(f"[REF] Error: {e}")
+              ref_text = ""
+              open(ref_wav_trim, "wb").close()
+
+          with open("/tmp/ref_text.txt", "w") as f:
+              f.write(ref_text)
+
+          sys.exit(0)
+          PYEOF
 
       - name: Upload model artifact
         uses: actions/upload-artifact@v4
@@ -62,12 +97,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Split script into 10 chunks
         run: |
-          python3 F01_DOMINION/CODEBASE/dominion_split_custom.py \
-            --script F01_DOMINION/SCRIPTS/stormist_001.md \
-            --output /tmp/chunks.json \
-            --n 10
+          python3 - <<'PYEOF'
+          import json, re
+
+          with open("F01_DOMINION/SCRIPTS/stormist_001.md", "r") as f:
+              text = f.read()
+
+          sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+          sentences = [s.strip() for s in sentences if s.strip()]
+
+          n = 10
+          total = len(sentences)
+          base = total // n
+          remainder = total % n
+
+          chunks = {}
+          idx = 0
+          for i in range(n):
+              size = base + (1 if i < remainder else 0)
+              chunk = " ".join(sentences[idx:idx+size])
+              chunks[str(i)] = chunk
+              print(f"Chunk {i}: {len(chunk)} chars")
+              idx += size
+
+          with open("/tmp/chunks.json", "w") as f:
+              json.dump(chunks, f, indent=2)
+          PYEOF
 
       - name: Upload chunks artifact
         uses: actions/upload-artifact@v4
@@ -91,7 +149,7 @@ jobs:
           pip install omnivoice --quiet
           sudo apt-get install -y ffmpeg
 
-      - name: Download artifacts
+      - name: Download model artifact
         uses: actions/download-artifact@v4
         with:
           name: omnivoice-model
@@ -109,20 +167,14 @@ jobs:
           name: chunks
           path: /tmp/
 
-      - name: Generate chunk
+      - name: Generate chunk ${{ matrix.chunk_id }}
         env:
           CHUNK_ID: ${{ matrix.chunk_id }}
-        run: |
-          python3 F01_DOMINION/CODEBASE/dominion_worker_custom.py \
-            --chunk_id $CHUNK_ID \
-            --chunks /tmp/chunks.json \
-            --model /tmp/omnivoice_model \
-            --ref_audio /tmp/ref_voice_trim.wav \
-            --ref_text_file /tmp/ref_text.txt \
-            --language en \
-            --output /tmp/chunk_${CHUNK_ID}.wav
+          OMNIVOICE_MODEL_PATH: /tmp/omnivoice_model
+          TTS_LANGUAGE: en
+        run: python3 F01_DOMINION/CODEBASE/dominion_worker_custom.py
 
-      - name: Upload chunk
+      - name: Upload chunk ${{ matrix.chunk_id }}
         uses: actions/upload-artifact@v4
         with:
           name: chunk-${{ matrix.chunk_id }}
@@ -144,18 +196,18 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: chunk-*
-          path: /tmp/chunks/
+          path: /tmp/
           merge-multiple: true
 
       - name: Concatenate and export MP3
-        run: |
-          python3 F01_DOMINION/CODEBASE/dominion_concat_custom.py \
-            --chunks_dir /tmp/chunks \
-            --output /tmp/stormist_001.mp3
+        env:
+          PROJECT_ID: stormist_001
+          N_WORKERS: "10"
+        run: python3 F01_DOMINION/CODEBASE/dominion_concat_custom.py
 
       - name: Upload final MP3
         uses: actions/upload-artifact@v4
         with:
           name: stormist-001-mp3
-          path: /tmp/stormist_001.mp3
+          path: /tmp/voice_stormist_001.mp3
           retention-days: 7
