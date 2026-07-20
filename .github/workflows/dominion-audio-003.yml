@@ -40,12 +40,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Split script
+      - name: Split script into chunks.json
         run: python3 F01_DOMINION/CODEBASE/dominion_split_003.py
       - uses: actions/upload-artifact@v4
         with:
           name: chunks-003
-          path: /tmp/chunk_*.txt
+          path: /tmp/chunks.json
 
   render:
     needs: [model-prep, split]
@@ -71,12 +71,8 @@ jobs:
         run: python3 F01_DOMINION/CODEBASE/dominion_worker_custom.py
         env:
           CHUNK_ID: ${{ matrix.chunk_id }}
-          CHUNK_FILE: /tmp/chunk_${{ matrix.chunk_id }}.txt
-          REF_AUDIO: /tmp/ref_voice_trim.wav
-          REF_TEXT_FILE: /tmp/ref_text.txt
-          MODEL_PATH: /tmp/omnivoice_model
-          OUTPUT_WAV: /tmp/chunk_${{ matrix.chunk_id }}.wav
-          LANGUAGE: en
+          OMNIVOICE_MODEL_PATH: /tmp/omnivoice_model
+          TTS_LANGUAGE: en
       - uses: actions/upload-artifact@v4
         with:
           name: chunk-${{ matrix.chunk_id }}
