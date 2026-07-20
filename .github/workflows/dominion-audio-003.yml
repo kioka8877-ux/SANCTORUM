@@ -12,28 +12,28 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install deps
-        run: pip install huggingface_hub pydub openai-whisper -q
-      - name: Install ffmpeg
-        run: sudo apt-get install -y ffmpeg
+        run: |
+          pip install huggingface_hub openai-whisper pydub -q
+          sudo apt-get install -y ffmpeg
       - name: Download OmniVoice model
         run: |
           python3 -c "
-import huggingface_hub, os
+import huggingface_hub
 huggingface_hub.snapshot_download('k2-fsa/OmniVoice', local_dir='/tmp/omnivoice_model')
-print('Model downloaded')
+print('Model OK')
 "
       - name: Prepare ref voice
         run: |
           cp SHARED/IN/ref_voice_003.mp3 /tmp/ref_voice_raw.mp3
           ffmpeg -i /tmp/ref_voice_raw.mp3 -ar 24000 -ac 1 -t 20 /tmp/ref_voice_trim.wav -y
           python3 -c "
-import whisper, json
+import whisper
 model = whisper.load_model('base')
 result = model.transcribe('/tmp/ref_voice_trim.wav', language='en')
 text = result['text'].strip()
 with open('/tmp/ref_text.txt', 'w') as f:
     f.write(text)
-print('ref_text:', text[:100])
+print('ref_text:', text[:120])
 "
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -48,49 +48,37 @@ print('ref_text:', text[:100])
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Split script into chunks
+      - name: Split script into 3 chunks
         run: |
           python3 -c "
-import json, textwrap
+import re, json
 
 with open('SHARED/IN/script_003.txt') as f:
     text = f.read().strip()
 
-# Split into sentences
-import re
-sentences = re.split(r'(?<=[.!?])\s+', text)
-sentences = [s.strip() for s in sentences if s.strip()]
+sentences = re.split(r'(?<=[.!?])\n|\n\n', text)
+sentences = [s.strip().replace('\n', ' ') for s in sentences if s.strip()]
+print(f'{len(sentences)} sentences')
 
-# Script is short — use 3 chunks
 n = 3
-chunk_size = max(1, len(sentences) // n)
+size = max(1, len(sentences) // n)
 chunks = []
 for i in range(n):
-    start = i * chunk_size
-    end = start + chunk_size if i < n-1 else len(sentences)
-    chunk_text = ' '.join(sentences[start:end])
-    if chunk_text:
-        chunks.append(chunk_text)
+    start = i * size
+    end = start + size if i < n - 1 else len(sentences)
+    chunk = ' '.join(sentences[start:end])
+    if chunk:
+        chunks.append(chunk)
 
-print(f'Created {len(chunks)} chunks')
 for i, c in enumerate(chunks):
-    print(f'  chunk_{i}: {len(c)} chars')
+    print(f'chunk_{i}: {len(c)} chars: {c[:60]}...')
     with open(f'/tmp/chunk_{i}.txt', 'w') as f:
         f.write(c)
-
-with open('/tmp/chunks_meta.json', 'w') as f:
-    json.dump({'n': len(chunks)}, f)
 "
-      - name: Upload chunks
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: chunks-meta
-          path: |
-            /tmp/chunk_*.txt
-            /tmp/chunks_meta.json
+          name: chunks-txt
+          path: /tmp/chunk_*.txt
 
   render:
     needs: [model-prep, split]
@@ -103,33 +91,52 @@ with open('/tmp/chunks_meta.json', 'w') as f:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install deps
-        run: pip install huggingface_hub -q
       - name: Install omnivoice
-        run: pip install omnivoice -q || pip install git+https://github.com/k2-fsa/OmniVoice.git -q || true
-      - name: Download model and ref
+        run: pip install omnivoice -q
+      - name: Download model + ref
         uses: actions/download-artifact@v4
         with:
           name: model-and-ref
           path: /tmp/
-      - name: Download chunks
+      - name: Download chunk texts
         uses: actions/download-artifact@v4
         with:
-          name: chunks-meta
+          name: chunks-txt
           path: /tmp/
-      - name: Generate audio
-        run: |
-          python3 F01_DOMINION/CODEBASE/dominion_worker_custom.py
+      - name: Generate audio chunk
         env:
           CHUNK_ID: ${{ matrix.chunk_id }}
-          CHUNK_FILE: /tmp/chunk_${{ matrix.chunk_id }}.txt
-          REF_AUDIO: /tmp/ref_voice_trim.wav
-          REF_TEXT_FILE: /tmp/ref_text.txt
-          MODEL_PATH: /tmp/omnivoice_model
-          OUTPUT_WAV: /tmp/chunk_${{ matrix.chunk_id }}.wav
-          LANGUAGE: en
-      - name: Upload chunk wav
-        uses: actions/upload-artifact@v4
+        run: |
+          python3 -c "
+import os, subprocess
+
+chunk_id = os.environ['CHUNK_ID']
+chunk_file = f'/tmp/chunk_{chunk_id}.txt'
+with open(chunk_file) as f:
+    text = f.read().strip()
+
+ref_audio = '/tmp/ref_voice_trim.wav'
+ref_text_file = '/tmp/ref_text.txt'
+model_path = '/tmp/omnivoice_model'
+output_wav = f'/tmp/chunk_{chunk_id}.wav'
+
+with open(ref_text_file) as f:
+    ref_text = f.read().strip()
+
+print(f'[WORKER {chunk_id}] {len(text)} chars: {text[:60]}...')
+print(f'[REF] {len(ref_text)} chars')
+
+cmd = ['omnivoice-infer', '--model', model_path, '--text', text,
+       '--language', 'en', '--output', output_wav,
+       '--ref_audio', ref_audio, '--ref_text', ref_text]
+
+r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+if r.returncode != 0:
+    print('STDERR:', r.stderr[-500:])
+    raise RuntimeError('omnivoice-infer failed')
+print(f'[OK] chunk_{chunk_id}.wav generated')
+"
+      - uses: actions/upload-artifact@v4
         with:
           name: chunk-${{ matrix.chunk_id }}
           path: /tmp/chunk_${{ matrix.chunk_id }}.wav
@@ -142,12 +149,8 @@ with open('/tmp/chunks_meta.json', 'w') as f:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install deps
-        run: |
-          pip install pydub -q
-          sudo apt-get install -y ffmpeg
-      - name: Download all chunks
-        uses: actions/download-artifact@v4
+      - run: pip install pydub -q && sudo apt-get install -y ffmpeg
+      - uses: actions/download-artifact@v4
         with:
           pattern: chunk-*
           path: /tmp/chunks/
@@ -156,23 +159,20 @@ with open('/tmp/chunks_meta.json', 'w') as f:
         run: |
           python3 -c "
 from pydub import AudioSegment
-import os, glob
+import glob, os
 
-chunks = sorted(glob.glob('/tmp/chunks/chunk_*.wav'))
-print(f'Found {len(chunks)} chunks: {chunks}')
-
+wavs = sorted(glob.glob('/tmp/chunks/chunk_*.wav'))
+print(f'{len(wavs)} wavs found')
 combined = AudioSegment.empty()
-for f in chunks:
+for f in wavs:
     seg = AudioSegment.from_wav(f)
     combined += seg
     print(f'  [+] {os.path.basename(f)}: {len(seg)/1000:.1f}s')
-
-output = '/tmp/voice_003.mp3'
-combined.export(output, format='mp3', bitrate='192k')
-print(f'[CONCAT] {len(combined)/1000:.1f}s total -> {output}')
+out = '/tmp/voice_003.mp3'
+combined.export(out, format='mp3', bitrate='192k')
+print(f'[DONE] {len(combined)/1000:.1f}s -> {out}')
 "
-      - name: Upload final MP3
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: voice-003-mp3
           path: /tmp/voice_003.mp3
