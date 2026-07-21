@@ -3,6 +3,12 @@ name: dominion-render
 on:
   workflow_dispatch:
     inputs:
+      trim_seconds:
+        description: 'Durée du trim voix ref en secondes (défaut: 20)'
+        required: false
+        default: '20'
+        type: string
+    inputs:
       project_id:
         description: "ID du projet (ex: 004)"
         required: true
@@ -41,6 +47,8 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: python F01_DOMINION/CODEBASE/model_prep.py
+        env:
+          TRIM_SECONDS: ${{ inputs.trim_seconds }}
       - name: Package model + ref files
         run: |
           tar -czf /tmp/omnivoice_model.tar.gz -C /tmp omnivoice_model
