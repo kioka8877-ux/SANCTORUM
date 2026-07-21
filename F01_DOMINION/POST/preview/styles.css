@@ -1,0 +1,186 @@
+/* Critical layout */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+img, video, svg { max-width: 100%; height: auto; }
+
+.card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+.dark .card {
+  background: #1a1a2e;
+  border-color: #2a2a3e;
+}
+
+.card-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+}
+.dark .card-title { color: #9ca3af; }
+
+.time-box {
+  background: #f3f4f6;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+}
+.dark .time-box {
+  background: #111118;
+  border-color: #2a2a3e;
+}
+.time-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.time-value {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  color: #f59e0b;
+  margin-top: 0.1rem;
+}
+
+.waveform-container {
+  background: #f3f4f6;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  min-height: 100px;
+}
+.dark .waveform-container {
+  background: #111118;
+}
+
+.label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 0.25rem;
+}
+.dark .label { color: #9ca3af; }
+
+.input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: white;
+  color: #111827;
+  font-size: 0.875rem;
+}
+.dark .input {
+  background: #111118;
+  border-color: #2a2a3e;
+  color: #f3f4f6;
+}
+.input:focus {
+  outline: none;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.btn-primary {
+  background: #f59e0b;
+  color: #1a1a2e;
+}
+.btn-primary:hover { background: #d97706; }
+.btn-secondary {
+  background: #e5e7eb;
+  color: #374151;
+}
+.btn-secondary:hover { background: #d1d5db; }
+.dark .btn-secondary {
+  background: #2a2a3e;
+  color: #e5e7eb;
+}
+.dark .btn-secondary:hover { background: #3a3a4e; }
+.btn-ghost {
+  background: transparent;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+.btn-ghost:hover { background: #f3f4f6; }
+.dark .btn-ghost {
+  color: #9ca3af;
+  border-color: #2a2a3e;
+}
+.dark .btn-ghost:hover { background: #1a1a2e; }
+
+.preset-active {
+  background: #f59e0b !important;
+  color: #1a1a2e !important;
+  border-color: #f59e0b !important;
+}
+
+.slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  outline: none;
+}
+.dark .slider { background: #2a2a3e; }
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #f59e0b;
+  cursor: pointer;
+}
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #f59e0b;
+  cursor: pointer;
+  border: none;
+}
+
+.config-preview {
+  background: #111827;
+  color: #a5b4fc;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-family: 'Courier New', monospace;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.code {
+  background: #f3f4f6;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+}
+.dark .code { background: #2a2a3e; }
