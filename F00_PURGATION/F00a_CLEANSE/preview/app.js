@@ -2,27 +2,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ─── State ───
   let wavesurfer = null;
-  let audioFile = null;
+  let wsRegions = null;
+  let activeRegion = null;
+  let clickCount = 0;
   let audioDuration = 0;
-  let region = null;
-
-  // ─── Auto-load pre-placed audio ───
-  const PRELOAD_AUDIO = 'ref_audio.mp3';
+  let audioFileName = 'ref_audio.mp3';
 
   // ─── DOM refs ───
-  const dropZone = document.getElementById('drop-zone');
-  const fileInput = document.getElementById('file-input');
-  const dropContent = document.getElementById('drop-content');
   const fileInfo = document.getElementById('file-info');
-  const waveformSection = document.getElementById('waveform-section');
+  const fileInput = document.getElementById('file-input');
   const waveformContainer = document.getElementById('waveform-container');
-  const optionsSection = document.getElementById('options-section');
-  const exportSection = document.getElementById('export-section');
-  const segmentStart = document.getElementById('segment-start');
-  const segmentEnd = document.getElementById('segment-end');
+  const timeIn = document.getElementById('time-in');
+  const timeOut = document.getElementById('time-out');
+  const timeDur = document.getElementById('time-dur');
   const playSegment = document.getElementById('play-segment');
   const playFull = document.getElementById('play-full');
   const stopPlay = document.getElementById('stop-play');
+  const resetRegion = document.getElementById('reset-region');
   const optVocalIsolation = document.getElementById('opt-vocal-isolation');
   const optDenoise = document.getElementById('opt-denoise');
   const optSpeed = document.getElementById('opt-speed');
@@ -32,36 +28,21 @@ document.addEventListener('DOMContentLoaded', function () {
   const copyConfig = document.getElementById('copy-config');
   const copyFeedback = document.getElementById('copy-feedback');
 
-  // ─── Auto-load pre-placed audio if available ───
-  function tryPreloadAudio() {
-    fetch(PRELOAD_AUDIO, { method: 'HEAD' })
-      .then(resp => {
-        if (resp.ok) {
-          // File exists — load it
-          audioFile = new File([''], 'ref_audio.mp3', { type: 'audio/mpeg' });
-          loadAudioFromUrl(PRELOAD_AUDIO, 'ref_audio.mp3', 1154125);
-        }
-      })
-      .catch(() => {
-        // No pre-placed file, user will upload manually
-      });
-  }
-
-  function loadAudioFromUrl(url, filename, filesize) {
-    const sizeMB = (filesize / 1024 / 1024).toFixed(2);
-    fileInfo.innerHTML = `
-      <p>✅ <strong>${filename}</strong> (auto-chargé)</p>
-      <p class="text-gray-400">${sizeMB} MB · audio/mpeg</p>
-    `;
-    fileInfo.classList.remove('hidden');
-
-    if (wavesurfer) wavesurfer.destroy();
+  // ─── Init WaveSurfer ───
+  function initWaveSurfer(url) {
+    if (wavesurfer) {
+      wavesurfer.destroy();
+      wavesurfer = null;
+      activeRegion = null;
+      clickCount = 0;
+    }
 
     wavesurfer = WaveSurfer.create({
       container: waveformContainer,
       waveColor: '#6b7280',
       progressColor: '#f59e0b',
       cursorColor: '#f59e0b',
+      cursorWidth: 2,
       barWidth: 2,
       barRadius: 1,
       responsive: true,
@@ -69,131 +50,146 @@ document.addEventListener('DOMContentLoaded', function () {
       url: url,
     });
 
+    // Regions plugin
+    wsRegions = wavesurfer.registerPlugin(
+      WaveSurfer.Regions.create()
+    );
+
     wavesurfer.on('ready', () => {
       audioDuration = wavesurfer.getDuration();
-      waveformSection.classList.remove('hidden');
-      optionsSection.classList.remove('hidden');
-      exportSection.classList.remove('hidden');
-
-      const defaultEnd = Math.min(20, audioDuration);
-      segmentStart.value = 0;
-      segmentEnd.value = defaultEnd.toFixed(1);
-      segmentEnd.max = audioDuration.toFixed(1);
-
-      enableRegionSelection();
+      fileInfo.innerHTML = `
+        <p>✅ <strong>${audioFileName}</strong> · ${audioDuration.toFixed(1)}s</p>
+        <p class="text-gray-400">Clique sur la waveform pour poser IN puis OUT</p>
+      `;
       updateConfig();
     });
 
-    wavesurfer.on('finish', () => { wavesurfer.seekTo(0); });
-  }
+    // Click on waveform → set IN then OUT
+    wavesurfer.on('interaction', (newTime) => {
+      clickCount++;
 
-  // Try to preload audio on page load
-  tryPreloadAudio();
+      if (clickCount === 1) {
+        // First click = IN point
+        // Remove any existing region
+        wsRegions.clearRegions();
+        activeRegion = null;
 
-  // ─── File upload (manual) ───
-  dropContent.addEventListener('click', () => fileInput.click());
-  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-  dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
-    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-  });
-  fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length) handleFile(e.target.files[0]);
-  });
-
-  function handleFile(file) {
-    audioFile = file;
-    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-    fileInfo.innerHTML = `
-      <p>✅ <strong>${file.name}</strong></p>
-      <p class="text-gray-400">${sizeMB} MB · ${file.type || 'unknown type'}</p>
-    `;
-    fileInfo.classList.remove('hidden');
-
-    const url = URL.createObjectURL(file);
-    loadAudioFromUrl(url, file.name, file.size);
-  }
-
-  // ─── Region selection (click-drag on waveform) ───
-  function enableRegionSelection() {
-    let isDragging = false;
-    let dragStart = 0;
-
-    waveformContainer.addEventListener('mousedown', startDrag);
-    waveformContainer.addEventListener('touchstart', startDrag);
-
-    function startDrag(e) {
-      const rect = waveformContainer.getBoundingClientRect();
-      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-      const pct = Math.max(0, Math.min(1, x / rect.width));
-      dragStart = pct * audioDuration;
-      isDragging = true;
-      segmentStart.value = dragStart.toFixed(1);
-    }
-
-    document.addEventListener('mousemove', updateDrag);
-    document.addEventListener('touchmove', updateDrag);
-
-    function updateDrag(e) {
-      if (!isDragging) return;
-      const rect = waveformContainer.getBoundingClientRect();
-      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-      const pct = Math.max(0, Math.min(1, x / rect.width));
-      const time = pct * audioDuration;
-      if (time > dragStart) {
-        segmentEnd.value = time.toFixed(1);
-      }
-      updateConfig();
-    }
-
-    document.addEventListener('mouseup', endDrag);
-    document.addEventListener('touchend', endDrag);
-
-    function endDrag() {
-      if (isDragging) {
-        isDragging = false;
-        // Ensure start < end
-        const s = parseFloat(segmentStart.value);
-        const en = parseFloat(segmentEnd.value);
-        if (s > en) {
-          segmentStart.value = en;
-          segmentEnd.value = s;
-        }
+        // Create a small region starting here
+        const start = newTime;
+        const end = Math.min(newTime + 5, audioDuration); // default 5s preview
+        activeRegion = wsRegions.addRegion({
+          start: start,
+          end: end,
+          color: 'rgba(245, 158, 11, 0.15)',
+          drag: true,
+          resize: true,
+        });
+        updateTimeLabels();
         updateConfig();
+      } else {
+        // Second click = OUT point
+        if (activeRegion) {
+          const currentStart = activeRegion.start;
+          if (newTime > currentStart) {
+            // Move end to clicked position
+            activeRegion.setOptions({
+              end: Math.min(newTime, audioDuration),
+            });
+          } else {
+            // Clicked before start → swap: new click is IN, old start is OUT
+            activeRegion.setOptions({
+              start: newTime,
+              end: currentStart,
+            });
+          }
+          updateTimeLabels();
+          updateConfig();
+        }
+        // Reset click count for next selection
+        clickCount = 0;
       }
-    }
+    });
+
+    // Region updated (drag/resize)
+    wsRegions.on('region-updated', (region) => {
+      activeRegion = region;
+      updateTimeLabels();
+      updateConfig();
+    });
+
+    // Region clicked → play it
+    wsRegions.on('region-clicked', (region, e) => {
+      e.stopPropagation();
+      activeRegion = region;
+      region.play();
+    });
+
+    wavesurfer.on('finish', () => {
+      wavesurfer.seekTo(0);
+    });
   }
 
-  // ─── Manual input changes ───
-  [segmentStart, segmentEnd].forEach(input => {
-    input.addEventListener('input', updateConfig);
+  // ─── Time labels ───
+  function updateTimeLabels() {
+    if (!activeRegion) {
+      timeIn.textContent = '--';
+      timeOut.textContent = '--';
+      timeDur.textContent = '--';
+      return;
+    }
+    const s = activeRegion.start;
+    const e = activeRegion.end;
+    timeIn.textContent = s.toFixed(1) + 's';
+    timeOut.textContent = e.toFixed(1) + 's';
+    timeDur.textContent = (e - s).toFixed(1) + 's';
+  }
+
+  // ─── Config generation ───
+  function updateConfig() {
+    if (!activeRegion || !audioDuration) {
+      configPreview.textContent = 'Sélectionne un segment d\'abord...';
+      return;
+    }
+
+    const config = {
+      source: audioFileName,
+      segment: {
+        start: parseFloat(activeRegion.start.toFixed(2)),
+        end: parseFloat(activeRegion.end.toFixed(2))
+      },
+      vocal_isolation: optVocalIsolation.checked,
+      denoise: optDenoise.checked,
+      speed: parseFloat(optSpeed.value) || 1.0
+    };
+    configPreview.textContent = JSON.stringify(config, null, 2);
+  }
+
+  // ─── Playback controls ───
+  playSegment.addEventListener('click', () => {
+    if (activeRegion) {
+      activeRegion.play();
+    } else {
+      alert('Sélectionne d\'abord un segment (clic IN puis clic OUT sur la waveform)');
+    }
   });
 
-  // ─── Playback ───
   playFull.addEventListener('click', () => {
     wavesurfer.seekTo(0);
     wavesurfer.play();
   });
 
-  playSegment.addEventListener('click', () => {
-    const start = parseFloat(segmentStart.value);
-    const end = parseFloat(segmentEnd.value);
-    wavesurfer.seekTo(start / audioDuration);
-    wavesurfer.play();
-
-    // Stop at end
-    const checkTime = setInterval(() => {
-      if (wavesurfer.getCurrentTime() >= end) {
-        wavesurfer.pause();
-        clearInterval(checkTime);
-      }
-    }, 50);
-  });
-
   stopPlay.addEventListener('click', () => {
     wavesurfer.pause();
+  });
+
+  resetRegion.addEventListener('click', () => {
+    if (wsRegions) {
+      wsRegions.clearRegions();
+      activeRegion = null;
+      clickCount = 0;
+      updateTimeLabels();
+      updateConfig();
+    }
   });
 
   // ─── Speed slider ───
@@ -208,23 +204,12 @@ document.addEventListener('DOMContentLoaded', function () {
     toggle.addEventListener('change', updateConfig);
   });
 
-  // ─── Config generation ───
-  function updateConfig() {
-    const config = {
-      source: audioFile ? audioFile.name : 'unknown',
-      segment: {
-        start: parseFloat(segmentStart.value) || 0,
-        end: parseFloat(segmentEnd.value) || 20
-      },
-      vocal_isolation: optVocalIsolation.checked,
-      denoise: optDenoise.checked,
-      speed: parseFloat(optSpeed.value) || 1.0
-    };
-    configPreview.textContent = JSON.stringify(config, null, 2);
-  }
-
   // ─── Download config ───
   downloadConfig.addEventListener('click', () => {
+    if (!activeRegion) {
+      alert('Sélectionne d\'abord un segment');
+      return;
+    }
     const blob = new Blob([configPreview.textContent], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -236,10 +221,39 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ─── Copy config ───
   copyConfig.addEventListener('click', () => {
+    if (!activeRegion) {
+      alert('Sélectionne d\'abord un segment');
+      return;
+    }
     navigator.clipboard.writeText(configPreview.textContent).then(() => {
       copyFeedback.classList.remove('hidden');
       setTimeout(() => copyFeedback.classList.add('hidden'), 2000);
     });
   });
+
+  // ─── Manual file upload ───
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      const file = e.target.files[0];
+      audioFileName = file.name;
+      const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+      fileInfo.innerHTML = `<p>Chargement de <strong>${file.name}</strong> (${sizeMB} MB)...</p>`;
+      const url = URL.createObjectURL(file);
+      initWaveSurfer(url);
+    }
+  });
+
+  // ─── Auto-load ref_audio.mp3 ───
+  fetch('ref_audio.mp3', { method: 'HEAD' })
+    .then(resp => {
+      if (resp.ok) {
+        initWaveSurfer('ref_audio.mp3');
+      } else {
+        fileInfo.innerHTML = '<p class="text-gray-400">Aucun audio pré-chargé. Charge un fichier ci-dessous.</p>';
+      }
+    })
+    .catch(() => {
+      fileInfo.innerHTML = '<p class="text-gray-400">Aucun audio pré-chargé. Charge un fichier ci-dessous.</p>';
+    });
 
 });
