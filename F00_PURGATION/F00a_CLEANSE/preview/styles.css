@@ -1,4 +1,4 @@
-/* Critical layout -- works even if the pinned Tailwind runtime is slow to load */
+/* Critical layout */
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
 img, video, svg { max-width: 100%; height: auto; }
@@ -25,15 +25,33 @@ img, video, svg { max-width: 100%; height: auto; }
 }
 .dark .card-title { color: #9ca3af; }
 
-/* Drop zone */
-.drop-zone {
-  border: 2px dashed #d1d5db;
+/* Time boxes */
+.time-box {
+  background: #f3f4f6;
   border-radius: 0.5rem;
-  transition: border-color 0.2s, background 0.2s;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  border: 1px solid #e5e7eb;
 }
-.drop-zone:hover, .drop-zone.dragover {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.05);
+.dark .time-box {
+  background: #111118;
+  border-color: #2a2a3e;
+}
+.time-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.time-value {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  color: #f59e0b;
+  margin-top: 0.1rem;
 }
 
 /* Waveform */
@@ -42,6 +60,7 @@ img, video, svg { max-width: 100%; height: auto; }
   border-radius: 0.5rem;
   padding: 0.5rem;
   min-height: 120px;
+  cursor: crosshair;
 }
 .dark .waveform-container {
   background: #111118;
@@ -130,7 +149,6 @@ img, video, svg { max-width: 100%; height: auto; }
 .toggle-row:hover { border-color: #f59e0b; }
 .dark .toggle-row { border-color: #2a2a3e; }
 
-/* Toggle checkbox */
 .toggle {
   width: 1.25rem;
   height: 1.25rem;
@@ -180,7 +198,6 @@ img, video, svg { max-width: 100%; height: auto; }
   word-break: break-all;
 }
 
-/* Code inline */
 .code {
   background: #f3f4f6;
   padding: 0.1rem 0.3rem;
@@ -189,16 +206,3 @@ img, video, svg { max-width: 100%; height: auto; }
   font-size: 0.75rem;
 }
 .dark .code { background: #2a2a3e; }
-
-/* Responsive card grid: stacks at 400px, fills as the panel widens */
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-  gap: 0.75rem;
-}
-
-/* Table wrapper for horizontal scroll when needed */
-.table-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
