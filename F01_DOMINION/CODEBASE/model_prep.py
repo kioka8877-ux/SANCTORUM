@@ -66,12 +66,13 @@ if TOKEN:
             ["ffmpeg", "-y", "-f", "mp3", "-i", raw_path, "-ar", "24000", "-ac", "1", ref_wav],
             capture_output=True, check=True
         )
-        # Option C: 5s au lieu de 15s
+        # Trim duration configurable via TRIM_SECONDS env var (default 20)
+        trim_sec = os.environ.get("TRIM_SECONDS", "20")
         subprocess.run(
-            ["ffmpeg", "-y", "-i", ref_wav, "-t", "5", "-ar", "24000", "-ac", "1", ref_wav_trim],
+            ["ffmpeg", "-y", "-i", ref_wav, "-t", trim_sec, "-ar", "24000", "-ac", "1", ref_wav_trim],
             capture_output=True, check=True
         )
-        print("[REF] Converted + trimmed to 5s OK")
+        print(f"[REF] Converted + trimmed to {trim_sec}s OK")
 
         import whisper
         wmodel = whisper.load_model("base")
