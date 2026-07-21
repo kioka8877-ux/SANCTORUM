@@ -56,10 +56,10 @@ jobs:
                   capture_output=True, check=True
               )
               subprocess.run(
-                  ["ffmpeg", "-y", "-i", "/tmp/ref_voice.wav", "-t", "20", "-ar", "24000", "-ac", "1", ref_wav_trim],
+                  ["ffmpeg", "-y", "-i", "/tmp/ref_voice.wav", "-t", os.environ.get("TRIM_SECONDS", "20"), "-ar", "24000", "-ac", "1", ref_wav_trim],
                   capture_output=True, check=True
               )
-              print("[REF] Trimmed to 20s OK")
+              print(f"[REF] Trimmed to {os.environ.get('TRIM_SECONDS', '20')}s OK")
 
               import whisper
               wmodel = whisper.load_model("base")
