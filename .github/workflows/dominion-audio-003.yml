@@ -23,7 +23,7 @@ jobs:
       - name: Prepare ref voice
         run: |
           cp SHARED/IN/ref_voice_003.mp3 /tmp/ref_voice_raw.mp3
-          ffmpeg -i /tmp/ref_voice_raw.mp3 -ar 24000 -ac 1 -t 20 /tmp/ref_voice_trim.wav -y
+          ffmpeg -i /tmp/ref_voice_raw.mp3 -ar 24000 -ac 1 -t ${TRIM_SECONDS:-20} /tmp/ref_voice_trim.wav -y
           python3 F01_DOMINION/CODEBASE/dominion_whisper.py /tmp/ref_voice_trim.wav /tmp/ref_text.txt
       - uses: actions/upload-artifact@v4
         with:
