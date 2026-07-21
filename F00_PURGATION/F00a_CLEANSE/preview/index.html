@@ -29,14 +29,14 @@
       <div class="text-2xl">⚔️</div>
       <div>
         <h1 class="text-lg font-bold tracking-tight">F00a — CLEANSE</h1>
-        <p class="text-xs text-gray-500 dark:text-gray-400">Purgation Audio · Sélection de segment & nettoyage</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400">Purgation Audio · Sélection, nettoyage & vitesse — preview en temps réel</p>
       </div>
     </div>
   </header>
 
   <main class="max-w-4xl mx-auto p-4 space-y-6">
 
-    <!-- Step 1: Audio info -->
+    <!-- Step 1: Audio source -->
     <section class="card">
       <h2 class="card-title">1 · Source audio</h2>
       <div id="file-info" class="text-xs space-y-1">
@@ -48,16 +48,15 @@
       </div>
     </section>
 
-    <!-- Step 2: Waveform + selection -->
+    <!-- Step 2: Waveform + segment selection -->
     <section class="card" id="waveform-section">
       <h2 class="card-title">2 · Sélection du segment</h2>
       <p class="text-xs text-gray-500 mb-2">
-        <strong>1er clic</strong> = point IN (début) · 
-        <strong>2e clic</strong> = point OUT (fin) · 
+        <strong>1er clic</strong> = point IN · 
+        <strong>2e clic</strong> = point OUT · 
         Glisse les bords ou la zone pour ajuster
       </p>
 
-      <!-- Time labels -->
       <div class="grid grid-cols-3 gap-2 mb-3">
         <div class="time-box">
           <span class="time-label">IN</span>
@@ -73,62 +72,80 @@
         </div>
       </div>
 
-      <!-- Waveform -->
       <div id="waveform-container" class="waveform-container"></div>
 
-      <!-- Controls -->
       <div class="flex flex-wrap gap-2 mt-3">
         <button id="play-segment" class="btn btn-primary">▶ Écouter la sélection</button>
         <button id="play-full" class="btn btn-secondary">▶ Play tout</button>
         <button id="stop-play" class="btn btn-ghost">⏹ Stop</button>
-        <button id="reset-region" class="btn btn-ghost">↺ Reset sélection</button>
+        <button id="reset-region" class="btn btn-ghost">↺ Reset</button>
       </div>
     </section>
 
-    <!-- Step 3: Options -->
+    <!-- Step 3: Processing — with LIVE PREVIEW -->
     <section class="card">
-      <h2 class="card-title">3 · Options de nettoyage</h2>
-      <div class="space-y-3">
-        <label class="toggle-row">
-          <div class="flex items-center gap-3">
-            <input type="checkbox" id="opt-vocal-isolation" class="toggle" checked>
-            <div>
-              <p class="font-medium text-sm">Isolation vocale (Demucs)</p>
-              <p class="text-xs text-gray-400">Sépare la voix de la musique et du bruit</p>
-            </div>
-          </div>
-        </label>
-        <label class="toggle-row">
-          <div class="flex items-center gap-3">
-            <input type="checkbox" id="opt-denoise" class="toggle" checked>
-            <div>
-              <p class="font-medium text-sm">Réduction de bruit (Noisereduce)</p>
-              <p class="text-xs text-gray-400">Atténue le bruit statique résiduel</p>
-            </div>
-          </div>
-        </label>
-        <div class="toggle-row">
-          <div class="flex items-center justify-between mb-2">
-            <div>
-              <p class="font-medium text-sm">Ajustement vitesse</p>
-              <p class="text-xs text-gray-400">Ralentit ou accélère la voix de référence</p>
-            </div>
-            <span id="speed-value" class="font-mono text-sm font-bold text-amber-500">1.00x</span>
-          </div>
-          <input type="range" id="opt-speed" class="slider" min="0.5" max="2.0" step="0.05" value="1.0">
-          <div class="flex justify-between text-xs text-gray-400 mt-1">
-            <span>0.5x (lent)</span>
-            <span>1.0x (normal)</span>
-            <span>2.0x (rapide)</span>
+      <h2 class="card-title">3 · Nettoyage & vitesse — preview en direct</h2>
+
+      <!-- A/B comparison toggle -->
+      <div class="flex gap-2 mb-4">
+        <button id="mode-raw" class="btn btn-secondary ab-btn ab-active">🔊 Audio brut</button>
+        <button id="mode-clean" class="btn btn-ghost ab-btn">✨ Audio nettoyé</button>
+      </div>
+
+      <!-- Vocal isolation -->
+      <label class="toggle-row">
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="opt-vocal-isolation" class="toggle" checked>
+          <div>
+            <p class="font-medium text-sm">Isolation vocale (Demucs + filtre preview)</p>
+            <p class="text-xs text-gray-400">Preview: high-pass 80Hz + boost vocal 1-4kHz · Production: demucs complet</p>
           </div>
         </div>
+      </label>
+
+      <!-- Denoise -->
+      <label class="toggle-row">
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="opt-denoise" class="toggle" checked>
+          <div>
+            <p class="font-medium text-sm">Réduction de bruit (Noise gate + noisereduce)</p>
+            <p class="text-xs text-gray-400">Preview: noise gate -40dB · Production: noisereduce complet</p>
+          </div>
+        </div>
+      </label>
+
+      <!-- Speed — LIVE preview -->
+      <div class="toggle-row">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <p class="font-medium text-sm">Vitesse — preview en direct</p>
+            <p class="text-xs text-gray-400">Bouge le slider et clique ▶ pour entendre le résultat</p>
+          </div>
+          <span id="speed-value" class="font-mono text-lg font-bold text-amber-500">1.00x</span>
+        </div>
+        <input type="range" id="opt-speed" class="slider" min="0.5" max="2.0" step="0.05" value="1.0">
+        <div class="flex justify-between text-xs text-gray-400 mt-1">
+          <span>0.5x (lent)</span>
+          <span>1.0x (normal)</span>
+          <span>2.0x (rapide)</span>
+        </div>
+      </div>
+
+      <!-- Preview button -->
+      <div class="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+        <button id="preview-processed" class="btn btn-primary w-full justify-center text-base py-3">
+          ▶ PREVIEW : écouter le résultat nettoyé + vitesse
+        </button>
+        <p class="text-xs text-gray-400 mt-2 text-center">
+          Joue la sélection avec les filtres + vitesse appliqués en temps réel
+        </p>
       </div>
     </section>
 
     <!-- Step 4: Export -->
     <section class="card">
       <h2 class="card-title">4 · Export configuration</h2>
-      <p class="text-xs text-gray-500 mb-3">Génère <code class="code">config.json</code> qui dirige F00a (cleanse) et F00b (forge).</p>
+      <p class="text-xs text-gray-500 mb-3">Génère <code class="code">config.json</code> pour F00a (cleanse) + F00b (forge).</p>
       <pre id="config-preview" class="config-preview">Sélectionne un segment d'abord...</pre>
       <div class="flex gap-2 mt-3">
         <button id="download-config" class="btn btn-primary">⬇ Télécharger config.json</button>
