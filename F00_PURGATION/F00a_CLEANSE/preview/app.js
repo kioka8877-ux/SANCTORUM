@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function () {
         wsRegions.clearRegions();
         activeRegion = null;
         const start = newTime;
-        const end = Math.min(newTime + 5, audioDuration);
+        const end = Math.min(newTime + 13, audioDuration);
         activeRegion = wsRegions.addRegion({
           start: start,
           end: end,
