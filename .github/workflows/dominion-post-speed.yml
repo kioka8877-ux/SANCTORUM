@@ -1,0 +1,63 @@
+name: dominion-post-speed
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: 'ID du run GitHub Actions qui a produit le MP3 original'
+        required: true
+      source_artifact:
+        description: 'Nom de l\'artifact contenant le MP3 (ex: voice-mummy-v2-mp3)'
+        required: true
+      speed:
+        description: 'Vitesse (0.85 = 15% plus lent, 1.0 = original, 1.25 = plus rapide)'
+        required: true
+        default: '0.85'
+
+jobs:
+  post-process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Download original artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.source_artifact }}
+          path: /tmp/original/
+          run_id: ${{ inputs.source_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find MP3 in artifact
+        id: find-mp3
+        run: |
+          MP3=$(find /tmp/original -name "*.mp3" | head -1)
+          echo "mp3_path=$MP3" >> $GITHUB_OUTPUT
+          echo "Found MP3: $MP3"
+
+      - name: Create post_config.json
+        run: |
+          cat > /tmp/post_config.json << 'EOF'
+          {
+            "source": "INPUT_MP3",
+            "speed": INPUT_SPEED
+          }
+          EOF
+          sed -i "s|INPUT_MP3|${{ steps.find-mp3.outputs.mp3_path }}|" /tmp/post_config.json
+          sed -i "s|INPUT_SPEED|${{ inputs.speed }}|" /tmp/post_config.json
+          cat /tmp/post_config.json
+
+      - name: Run post_process.py
+        run: |
+          python3 F01_DOMINION/POST/post_process.py /tmp/post_config.json ${{ steps.find-mp3.outputs.mp3_path }}
+
+      - name: Upload slowed MP3
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-slowed-mp3
+          path: /tmp/original/*_post.mp3
