@@ -6,7 +6,7 @@ on:
         description: 'ID du run GitHub Actions qui a produit le MP3 original'
         required: true
       source_artifact:
-        description: 'Nom de l\'artifact contenant le MP3 (ex: voice-mummy-v2-mp3)'
+        description: 'Nom de l artifact contenant le MP3 (ex: voice-mummy-v2-mp3)'
         required: true
       speed:
         description: 'Vitesse (0.85 = 15% plus lent, 1.0 = original, 1.25 = plus rapide)'
@@ -22,42 +22,73 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install ffmpeg
-        run: sudo apt-get install -y ffmpeg
+      - name: Install ffmpeg + requests
+        run: |
+          sudo apt-get install -y ffmpeg
+          pip install requests -q
 
-      - name: Download original artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.source_artifact }}
-          path: /tmp/original/
-          run_id: ${{ inputs.source_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download artifact and extract MP3
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          python3 -c "
+          import requests, zipfile, io, os, json
+          token = os.environ['GH_PAT']
+          repo = 'kioka8877-ux/SANCTORUM'
+          run_id = '${{ inputs.source_run_id }}'
+          artifact_name = '${{ inputs.source_artifact }}'
 
-      - name: Find MP3 in artifact
+          # List artifacts for the run
+          url = f'https://api.github.com/repos/{repo}/actions/runs/{run_id}/artifacts'
+          r = requests.get(url, headers={'Authorization': f'token {token}'})
+          artifacts = r.json()['artifacts']
+
+          # Find the right artifact
+          artifact = None
+          for a in artifacts:
+              if a['name'] == artifact_name:
+                  artifact = a
+                  break
+
+          if not artifact:
+              print(f'Artifact {artifact_name} not found in run {run_id}')
+              print(f'Available: {[a[\"name\"] for a in artifacts]}')
+              exit(1)
+
+          print(f'Downloading artifact: {artifact[\"name\"]} ({artifact[\"size_in_bytes\"]//1024} KB)')
+
+          # Download the zip
+          zip_url = f'https://api.github.com/repos/{repo}/actions/artifacts/{artifact[\"id\"]}/zip'
+          resp = requests.get(zip_url, headers={'Authorization': f'token {token}'}, allow_redirects=True)
+
+          # Extract
+          with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
+              z.extractall('/tmp/original/')
+
+          # Find MP3
+          for f in os.listdir('/tmp/original/'):
+              if f.endswith('.mp3'):
+                  print(f'Found MP3: {f} ({os.path.getsize(\"/tmp/original/\" + f)//1024} KB)')
+          "
+
+      - name: Find MP3
         id: find-mp3
         run: |
           MP3=$(find /tmp/original -name "*.mp3" | head -1)
           echo "mp3_path=$MP3" >> $GITHUB_OUTPUT
-          echo "Found MP3: $MP3"
+          echo "Found: $MP3"
 
-      - name: Create post_config.json
+      - name: Apply speed adjustment
         run: |
-          cat > /tmp/post_config.json << 'EOF'
-          {
-            "source": "INPUT_MP3",
-            "speed": INPUT_SPEED
-          }
-          EOF
-          sed -i "s|INPUT_MP3|${{ steps.find-mp3.outputs.mp3_path }}|" /tmp/post_config.json
-          sed -i "s|INPUT_SPEED|${{ inputs.speed }}|" /tmp/post_config.json
-          cat /tmp/post_config.json
-
-      - name: Run post_process.py
-        run: |
-          python3 F01_DOMINION/POST/post_process.py /tmp/post_config.json ${{ steps.find-mp3.outputs.mp3_path }}
+          MP3="${{ steps.find-mp3.outputs.mp3_path }}"
+          BASE=$(basename "$MP3" .mp3)
+          OUTPUT="/tmp/${BASE}_post.mp3"
+          ffmpeg -y -i "$MP3" -filter:a "atempo=${{ inputs.speed }}" -b:a 192k "$OUTPUT"
+          echo "Created: $OUTPUT"
+          ls -la "$OUTPUT"
 
       - name: Upload slowed MP3
         uses: actions/upload-artifact@v4
         with:
           name: post-slowed-mp3
-          path: /tmp/original/*_post.mp3
+          path: /tmp/*_post.mp3
