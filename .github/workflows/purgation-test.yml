@@ -1,0 +1,79 @@
+name: purgation-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_audio:
+        description: 'Chemin du fichier audio source dans le repo (ex: SHARED/IN/ref_voice_003.mp3)'
+        required: true
+        default: 'SHARED/IN/ref_voice_003.mp3'
+      segment_start:
+        description: 'Début du segment (secondes)'
+        required: true
+        default: '0'
+      segment_end:
+        description: 'Fin du segment (secondes)'
+        required: true
+        default: '20'
+      speed:
+        description: 'Vitesse (0.5 = lent, 1.0 = normal, 2.0 = rapide)'
+        required: true
+        default: '1.0'
+      vocal_isolation:
+        description: 'Isolation vocale demucs (true/false)'
+        required: true
+        default: 'true'
+      denoise:
+        description: 'Reduction de bruit (true/false)'
+        required: true
+        default: 'true'
+
+jobs:
+  cleanse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install demucs noisereduce librosa soundfile -q
+          sudo apt-get install -y ffmpeg
+
+      - name: Create config.json
+        run: |
+          cat > /tmp/config.json << 'EOF'
+          {
+            "source": "INPUT_SOURCE",
+            "segment": { "start": INPUT_START, "end": INPUT_END },
+            "vocal_isolation": INPUT_VOCAL,
+            "denoise": INPUT_DENOISE,
+            "speed": INPUT_SPEED
+          }
+          EOF
+          sed -i "s|INPUT_SOURCE|${{ inputs.source_audio }}|" /tmp/config.json
+          sed -i "s|INPUT_START|${{ inputs.segment_start }}|" /tmp/config.json
+          sed -i "s|INPUT_END|${{ inputs.segment_end }}|" /tmp/config.json
+          sed -i "s|INPUT_VOCAL|${{ inputs.vocal_isolation }}|" /tmp/config.json
+          sed -i "s|INPUT_DENOISE|${{ inputs.denoise }}|" /tmp/config.json
+          sed -i "s|INPUT_SPEED|${{ inputs.speed }}|" /tmp/config.json
+          cat /tmp/config.json
+
+      - name: Run F00a CLEANSE
+        run: |
+          python3 F00_PURGATION/F00a_CLEANSE/cleanse.py /tmp/config.json ${{ inputs.source_audio }}
+
+      - name: Run F00b FORGE
+        run: |
+          python3 F00_PURGATION/F00b_FORGE/forge.py /tmp/config.json ref_voice_isolated.wav
+
+      - name: Upload cleaned voice
+        uses: actions/upload-artifact@v4
+        with:
+          name: ref-voice-clean
+          path: |
+            ref_voice_clean.wav
+            ref_voice_isolated.wav
+            /tmp/config.json
