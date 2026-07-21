@@ -1,0 +1,154 @@
+name: dominion-mummy-v2
+on:
+  workflow_dispatch:
+    inputs:
+      trim_seconds:
+        description: 'Durée du trim voix ref en secondes (défaut: 13)'
+        required: false
+        default: '13'
+        type: string
+
+jobs:
+  model-prep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          pip install huggingface_hub openai-whisper pydub -q
+          sudo apt-get install -y ffmpeg git-lfs
+      - name: Download OmniVoice model
+        run: |
+          python3 -c "
+          from huggingface_hub import snapshot_download
+          snapshot_download('k2-fsa/OmniVoice', local_dir='/tmp/omnivoice_model')
+          print('Model downloaded')
+          "
+      - name: Prepare ref voice (trim 0.44s to 13s)
+        run: |
+          cp SHARED/IN/ref_voice.mp3 /tmp/ref_voice_raw.mp3
+          ffmpeg -y -i /tmp/ref_voice_raw.mp3 -ss 0.44 -t 12.56 -ar 24000 -ac 1 /tmp/ref_voice_trim.wav
+          python3 -c "
+          import whisper
+          model = whisper.load_model('base')
+          result = model.transcribe('/tmp/ref_voice_trim.wav', language='en')
+          text = result['text'].strip()
+          with open('/tmp/ref_text.txt', 'w') as f:
+              f.write(text)
+          print(f'ref_text: {text[:120]}')
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-and-ref
+          path: |
+            /tmp/omnivoice_model/
+            /tmp/ref_voice_trim.wav
+            /tmp/ref_text.txt
+
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Split script into chunks
+        run: |
+          python3 -c "
+          import json, re
+          with open('SHARED/IN/script_mummy.txt') as f:
+              text = f.read().strip()
+          sentences = re.split(r'(?<=[.!?])\s+', text)
+          sentences = [s.strip() for s in sentences if s.strip()]
+          n = 3
+          chunk_size = max(1, len(sentences) // n)
+          chunks = {}
+          for i in range(n):
+              start = i * chunk_size
+              end = start + chunk_size if i < n-1 else len(sentences)
+              chunk_text = ' '.join(sentences[start:end])
+              if chunk_text:
+                  chunks[str(i)] = chunk_text
+                  print(f'  chunk_{i}: {len(chunk_text)} chars')
+          with open('/tmp/chunks.json', 'w') as f:
+              json.dump(chunks, f, ensure_ascii=False, indent=2)
+          print(f'Created {len(chunks)} chunks')
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunks-data
+          path: /tmp/chunks.json
+
+  render:
+    needs: [model-prep, split]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        chunk_id: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install omnivoice -q || pip install git+https://github.com/k2-fsa/OmniVoice.git -q || true
+      - uses: actions/download-artifact@v4
+        with:
+          name: model-and-ref
+          path: /tmp/
+      - uses: actions/download-artifact@v4
+        with:
+          name: chunks-data
+          path: /tmp/
+      - name: Generate audio
+        run: python3 F01_DOMINION/CODEBASE/dominion_worker_custom.py
+        env:
+          CHUNK_ID: ${{ matrix.chunk_id }}
+          REF_AUDIO: /tmp/ref_voice_trim.wav
+          REF_TEXT_FILE: /tmp/ref_text.txt
+          MODEL_PATH: /tmp/omnivoice_model
+          OUTPUT_WAV: /tmp/chunk_${{ matrix.chunk_id }}.wav
+          LANGUAGE: en
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.chunk_id }}
+          path: /tmp/chunk_${{ matrix.chunk_id }}.wav
+
+  concat:
+    needs: render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          pip install pydub -q
+          sudo apt-get install -y ffmpeg
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chunk-*
+          path: /tmp/chunks/
+          merge-multiple: true
+      - name: Concat to MP3
+        run: |
+          python3 -c "
+          from pydub import AudioSegment
+          import os, glob
+          chunks = sorted(glob.glob('/tmp/chunks/chunk_*.wav'), key=lambda x: int(x.split('_')[-1].split('.')[0]))
+          print(f'Found {len(chunks)} chunks: {chunks}')
+          combined = AudioSegment.empty()
+          for f in chunks:
+              seg = AudioSegment.from_wav(f)
+              combined += seg
+              print(f'  [+] {os.path.basename(f)}: {len(seg)/1000:.1f}s')
+          output = '/tmp/voice_mummy_v2.mp3'
+          combined.export(output, format='mp3', bitrate='192k')
+          print(f'[CONCAT] {len(combined)/1000:.1f}s total -> {output}')
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-mummy-v2-mp3
+          path: /tmp/voice_mummy_v2.mp3
