@@ -10,6 +10,7 @@
     crossorigin="anonymous"
   ></script>
   <script src="https://unpkg.com/wavesurfer.js@7"></script>
+  <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
   <style type="text/tailwindcss">
     @custom-variant dark (&:where(.dark, .dark *));
   </style>
@@ -23,64 +24,71 @@
 </head>
 <body class="min-h-dvh text-sm antialiased bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
 
-  <!-- Header -->
   <header class="border-b border-gray-200 dark:border-gray-800 px-4 py-3">
     <div class="flex items-center gap-3">
       <div class="text-2xl">⚔️</div>
       <div>
         <h1 class="text-lg font-bold tracking-tight">F00a — CLEANSE</h1>
-        <p class="text-xs text-gray-500 dark:text-gray-400">Purgation Audio · Isolation vocale & nettoyage</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400">Purgation Audio · Sélection de segment & nettoyage</p>
       </div>
     </div>
   </header>
 
   <main class="max-w-4xl mx-auto p-4 space-y-6">
 
-    <!-- Step 1: Upload -->
+    <!-- Step 1: Audio info -->
     <section class="card">
       <h2 class="card-title">1 · Source audio</h2>
-      <div id="drop-zone" class="drop-zone">
-        <input type="file" id="file-input" accept="audio/*,video/*" class="hidden">
-        <div class="text-center py-8 cursor-pointer" id="drop-content">
-          <div class="text-4xl mb-2">📂</div>
-          <p class="text-sm font-medium">Clique ou dépose un fichier audio</p>
-          <p class="text-xs text-gray-400 mt-1">MP3, WAV, M4A, MP4...</p>
-        </div>
+      <div id="file-info" class="text-xs space-y-1">
+        <p class="text-gray-400">Chargement de l'audio...</p>
       </div>
-      <div id="file-info" class="hidden mt-3 text-xs space-y-1"></div>
+      <div class="mt-3">
+        <label class="label">Ou charge un autre fichier</label>
+        <input type="file" id="file-input" accept="audio/*,video/*" class="input">
+      </div>
     </section>
 
-    <!-- Step 2: Waveform + segment selection -->
-    <section class="card hidden" id="waveform-section">
+    <!-- Step 2: Waveform + selection -->
+    <section class="card" id="waveform-section">
       <h2 class="card-title">2 · Sélection du segment</h2>
-      <p class="text-xs text-gray-500 mb-3">Clique-glisse sur la waveform pour sélectionner les 10-20 secondes où la voix est claire et expressive.</p>
+      <p class="text-xs text-gray-500 mb-2">
+        <strong>1er clic</strong> = point IN (début) · 
+        <strong>2e clic</strong> = point OUT (fin) · 
+        Glisse les bords ou la zone pour ajuster
+      </p>
 
+      <!-- Time labels -->
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        <div class="time-box">
+          <span class="time-label">IN</span>
+          <span id="time-in" class="time-value">--</span>
+        </div>
+        <div class="time-box">
+          <span class="time-label">OUT</span>
+          <span id="time-out" class="time-value">--</span>
+        </div>
+        <div class="time-box">
+          <span class="time-label">DURÉE</span>
+          <span id="time-dur" class="time-value">--</span>
+        </div>
+      </div>
+
+      <!-- Waveform -->
       <div id="waveform-container" class="waveform-container"></div>
 
-      <div class="grid grid-cols-2 gap-3 mt-3">
-        <div>
-          <label class="label">Début (sec)</label>
-          <input type="number" id="segment-start" class="input" step="0.1" min="0" value="0">
-        </div>
-        <div>
-          <label class="label">Fin (sec)</label>
-          <input type="number" id="segment-end" class="input" step="0.1" min="0" value="20">
-        </div>
-      </div>
-
-      <div class="flex gap-2 mt-3">
-        <button id="play-segment" class="btn btn-secondary">▶ Preview segment</button>
-        <button id="play-full" class="btn btn-ghost">▶ Play full</button>
+      <!-- Controls -->
+      <div class="flex flex-wrap gap-2 mt-3">
+        <button id="play-segment" class="btn btn-primary">▶ Écouter la sélection</button>
+        <button id="play-full" class="btn btn-secondary">▶ Play tout</button>
         <button id="stop-play" class="btn btn-ghost">⏹ Stop</button>
+        <button id="reset-region" class="btn btn-ghost">↺ Reset sélection</button>
       </div>
     </section>
 
-    <!-- Step 3: Processing options -->
-    <section class="card hidden" id="options-section">
+    <!-- Step 3: Options -->
+    <section class="card">
       <h2 class="card-title">3 · Options de nettoyage</h2>
-
       <div class="space-y-3">
-        <!-- Vocal isolation -->
         <label class="toggle-row">
           <div class="flex items-center gap-3">
             <input type="checkbox" id="opt-vocal-isolation" class="toggle" checked>
@@ -90,8 +98,6 @@
             </div>
           </div>
         </label>
-
-        <!-- Denoise -->
         <label class="toggle-row">
           <div class="flex items-center gap-3">
             <input type="checkbox" id="opt-denoise" class="toggle" checked>
@@ -101,8 +107,6 @@
             </div>
           </div>
         </label>
-
-        <!-- Speed -->
         <div class="toggle-row">
           <div class="flex items-center justify-between mb-2">
             <div>
@@ -121,19 +125,16 @@
       </div>
     </section>
 
-    <!-- Step 4: Export config -->
-    <section class="card hidden" id="export-section">
+    <!-- Step 4: Export -->
+    <section class="card">
       <h2 class="card-title">4 · Export configuration</h2>
-      <p class="text-xs text-gray-500 mb-3">Génère le fichier <code class="code">config.json</code> qui dirige F00a (cleanse) et F00b (forge).</p>
-
-      <pre id="config-preview" class="config-preview"></pre>
-
+      <p class="text-xs text-gray-500 mb-3">Génère <code class="code">config.json</code> qui dirige F00a (cleanse) et F00b (forge).</p>
+      <pre id="config-preview" class="config-preview">Sélectionne un segment d'abord...</pre>
       <div class="flex gap-2 mt-3">
         <button id="download-config" class="btn btn-primary">⬇ Télécharger config.json</button>
         <button id="copy-config" class="btn btn-secondary">📋 Copier</button>
       </div>
-
-      <div id="copy-feedback" class="hidden text-xs text-green-500 mt-2">✅ Copié dans le presse-papier</div>
+      <div id="copy-feedback" class="hidden text-xs text-green-500 mt-2">✅ Copié</div>
     </section>
 
   </main>
